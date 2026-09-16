@@ -6,11 +6,15 @@ Fonctions :
   * réglages (seuils, méthodes, SSID maison, mode hors-ligne sécurisé) ;
   * boutons pratiques (verrouiller, enregistrer visage, journal, captures) ;
   * icône dans la barre système.
+  * instance unique garantie par fichier lock
 """
 from __future__ import annotations
 
+import fcntl
 import os
 import subprocess
+import sys
+from pathlib import Path
 
 import gi
 
@@ -25,6 +29,7 @@ import security_linux.runtime as runtime  # noqa: E402
 from security_linux.version import APP_NAME, __version__  # noqa: E402
 
 _TICK_MS = 1000
+_LOCK_FILE = None
 
 
 class AdminCodeDialog(Gtk.MessageDialog):
@@ -132,11 +137,15 @@ class SecurityLinuxApp:
 
     # --------------------------------------------------------- cycle de vie
     def run(self) -> None:
+        if not _acquire_instance_lock():
+            _msg_existing_instance()
+            return
         self.window = self.build_ui()
         self._poll()
         self._maybe_setup_admin_code()
         self._build_tray()
         Gtk.main()
+        _release_instance_lock()
 
     def on_delete_event(self, *_args):
         # se ferme en barre système et non quit
@@ -715,6 +724,53 @@ class SecuritySettingsDialog:
         }
         events.write_command({"type": "set_many", "values": values})
         events.log_event("config", "réglages mis à jour")
+
+
+def _get_lock_path() -> Path:
+    """Retourne le chemin du fichier lock pour l'instance unique."""
+    if runtime.is_debug():
+        return runtime.debug_root() / "gui.lock"
+    base = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp"))
+    return base / f"security-linux-gui.lock"
+
+
+def _acquire_instance_lock() -> bool:
+    """Acquiert le verrou d'instance unique. Retourne False si déjà acquis."""
+    global _LOCK_FILE
+    lock_path = _get_lock_path()
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        _LOCK_FILE = open(lock_path, "w")
+        fcntl.flock(_LOCK_FILE.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _LOCK_FILE.write(str(os.getpid()))
+        _LOCK_FILE.flush()
+        return True
+    except (IOError, OSError):
+        if _LOCK_FILE:
+            _LOCK_FILE.close()
+            _LOCK_FILE = None
+        return False
+
+
+def _release_instance_lock() -> None:
+    """Relâche le verrou d'instance."""
+    global _LOCK_FILE
+    if _LOCK_FILE:
+        try:
+            fcntl.flock(_LOCK_FILE.fileno(), fcntl.LOCK_UN)
+            _LOCK_FILE.close()
+            _LOCK_FILE = None
+            lock_path = _get_lock_path()
+            if lock_path.exists():
+                lock_path.unlink(missing_ok=True)
+        except (IOError, OSError):
+            pass
+
+
+def _msg_existing_instance() -> None:
+    """Affiche un message indiquant qu'une instance est déjà en cours."""
+    print(f"{APP_NAME}: une instance est déjà en cours d'exécution.", file=sys.stderr)
+    sys.exit(1)
 
 
 def main():

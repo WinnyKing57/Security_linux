@@ -217,3 +217,6 @@ installation ni à des données réelles, sur n'importe quelle machine ».
 9. Installation de Howdy depuis le code source : bouton dans Réglages → Howdy
    qui lance `scripts/install_howdy.sh` (pkexec, compilations meson + dlib,
    activation PAM, téléchargement des modèles) — v2.
+10. **Instance unique** : empêcher le lancement de plusieurs instances de l'application GUI
+11. **Correction authentification admin** : investiguer et corriger le dysfonctionnement de la désactivation par mot de passe
+12. **Anti-bruteforce** : limiter à 3 tentatives de code admin par 10 minutes
