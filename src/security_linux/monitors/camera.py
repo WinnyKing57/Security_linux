@@ -46,6 +46,25 @@ class CameraMonitor(Monitor):
                 return candidate
         return None
 
+    @staticmethod
+    def list_devices() -> list[str]:
+        """Périphériques vidéo présents (/dev/video*)."""
+        return [d for i in range(16) if os.path.exists(d := f"/dev/video{i}")]
+
+    @staticmethod
+    def device_label(device: str) -> str:
+        """Nom lisible d'un périphérique (via sysfs v4l), sinon le chemin."""
+        base = os.path.basename(device)
+        root = f"/sys/class/video4linux/{base}/name"
+        try:
+            with open(root, encoding="utf-8", errors="replace") as fh:
+                name = fh.read().strip()
+            if name:
+                return name
+        except OSError:
+            pass
+        return device
+
     def supported(self) -> bool:
         return self._cv2_available and self.resolve_device() is not None
 

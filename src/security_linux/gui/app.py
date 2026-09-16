@@ -422,16 +422,31 @@ class SecuritySettingsDialog:
         return v
 
     def _camera_tab(self):
+        from security_linux.monitors.camera import CameraMonitor  # noqa: PLC0415
+
         v = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         c = self.cfg["camera"]
         self.cam_enabled = Gtk.Switch(active=bool(c["enabled"]))
-        self.cam_device = Gtk.Entry(text=c["device"])
+
+        self.cam_devices = CameraMonitor.list_devices()
+        self.cam_device = Gtk.ComboBoxText()
+        for dev in self.cam_devices:
+            self.cam_device.append(dev, f"{dev} — {CameraMonitor.device_label(dev)}")
+        current = c["device"]
+        if current not in self.cam_devices and current:
+            self.cam_device.append(current, f"{current} — configuré mais non détecté")
+        if not self.cam_devices:
+            self.cam_device.append("", "— aucun périphérique détecté —")
+            self.cam_device.set_active_id("")
+        else:
+            self.cam_device.set_active_id(current if current in self.cam_devices else self.cam_devices[0])
+
         self.cam_poll = self._spin(c["poll_seconds"], 2, 60, 1)
         self.cam_confirm = self._spin(c["absent_confirmations"], 1, 10, 1)
         self.cam_capture = Gtk.Switch(active=bool(c["capture_on_lock"]))
         for lbl, wgt in (
             ("Activer la détection webcam", self.cam_enabled),
-            ("Périphérique", self.cam_device),
+            ("Périphérique (aperçu en direct)", self.cam_device),
             ("Analyse toutes les (s)", self.cam_poll),
             ("Photos de confirmation", self.cam_confirm),
             ("Capturer une image locale lors du verrouillage", self.cam_capture),
@@ -440,8 +455,103 @@ class SecuritySettingsDialog:
             row.pack_start(Gtk.Label(label=lbl, xalign=0), True, True, 0)
             row.pack_end(wgt, False, True, 0)
             v.pack_start(row, False, True, 0)
+
+        # --- aperçu en direct (test droits / périphérique) ---
+        frame = Gtk.Frame(label="Aperçu en direct")
+        inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.cam_preview = Gtk.Image()
+        self.cam_preview.set_size_request(420, 236)
+        self.cam_status = Gtk.Label(label="Lancement de l'aperçu…", xalign=0)
+        self.cam_status.set_line_wrap(True)
+        inner.pack_start(self.cam_preview, True, True, 0)
+        inner.pack_start(self.cam_status, False, True, 0)
+        frame.add(inner)
+        v.pack_start(frame, True, True, 0)
+
+        self._preview_cap = None
+        self._preview_dev = None
+        self._preview_src = GLib.timeout_add(150, self._preview_tick)
+
         v.pack_start(Gtk.Label(label="Aucune donnée n'est envoyée sur internet.", xalign=0), False, True, 0)
         return v
+
+    def _preview_tick(self):
+        dev = self.cam_device.get_active_id() or ""
+        if not dev:
+            self.cam_status.set_markup(
+                '<span color="red">Aucun périphérique vidéo détecté.</span>'
+            )
+            return True
+        if self._preview_dev != dev:
+            self._release_preview()
+            self._preview_dev = dev
+        cap = self._preview_cap
+        if cap is None:
+            try:
+                import cv2  # noqa: PLC0415
+
+                cap = cv2.VideoCapture(dev, cv2.CAP_V4L2)
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
+                if not cap.isOpened():
+                    cap.release()
+                    self.cam_status.set_markup(
+                        f'<span color="red">Impossible d\'ouvrir {dev} — '
+                        "droits insuffisants (groupe « video ») ou périphérique occupé.</span>"
+                    )
+                    self.cam_preview.clear()
+                    return True
+            except Exception as exc:  # noqa: BLE001
+                self.cam_status.set_markup(f'<span color="red">Erreur caméra : {exc}</span>')
+                return True
+            self._preview_cap = cap
+        try:
+            from security_linux.monitors.camera import CameraMonitor  # noqa: PLC0415
+
+            import cv2  # noqa: PLC0415
+
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                self.cam_status.set_markup(
+                    f'<span color="orange">Aucune image de {dev} '
+                    "(périphérique occupé par un autre programme ?)</span>"
+                )
+                return True
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w = rgb.shape[:2]
+            pb = GdkPixbuf.Pixbuf.new_from_bytes(
+                GLib.Bytes(rgb.tobytes()),
+                GdkPixbuf.Colorspace.RGB,
+                False,
+                8,
+                w,
+                h,
+                w * 3,
+            )
+            pb = pb.scale_simple(420, int(420 * h / w), GdkPixbuf.InterpType.BILINEAR)
+            self.cam_preview.set_from_pixbuf(pb)
+            self.cam_status.set_markup(
+                f'<span color="green">OK — {CameraMonitor.device_label(dev)}</span>'
+            )
+        except Exception as exc:  # noqa: BLE001
+            self.cam_status.set_markup(f'<span color="red">Erreur aperçu : {exc}</span>')
+        return True
+
+    def _release_preview(self):
+        cap = self._preview_cap
+        self._preview_cap = None
+        self._preview_dev = None
+        if cap is not None:
+            try:
+                cap.release()
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _stop_preview(self):
+        if self._preview_src is not None:
+            GLib.source_remove(self._preview_src)
+            self._preview_src = None
+        self._release_preview()
 
     def _bluetooth_tab(self):
         v = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -541,10 +651,13 @@ class SecuritySettingsDialog:
 
     def run(self):
         self.dlg.show_all()
-        resp = self.dlg.run()
-        if resp == Gtk.ResponseType.OK:
-            self._apply()
-        self.dlg.destroy()
+        try:
+            resp = self.dlg.run()
+            if resp == Gtk.ResponseType.OK:
+                self._apply()
+        finally:
+            self._stop_preview()
+            self.dlg.destroy()
 
     def _apply(self):
         g = self.cfg["general"]
@@ -555,7 +668,7 @@ class SecuritySettingsDialog:
 
         c = self.cfg["camera"]
         c["enabled"] = self.cam_enabled.get_active()
-        c["device"] = self.cam_device.get_text().strip() or "/dev/video0"
+        c["device"] = self.cam_device.get_active_id() or "/dev/video0"
         c["poll_seconds"] = int(self.cam_poll.get_value())
         c["absent_confirmations"] = int(self.cam_confirm.get_value())
         c["capture_on_lock"] = self.cam_capture.get_active()
@@ -591,6 +704,7 @@ class SecuritySettingsDialog:
         # applique à chaud les réglages au démon
         values = {
             "camera.enabled": self.cfg["camera"]["enabled"],
+            "camera.device": self.cfg["camera"]["device"],
             "bluetooth.device_addr": self.cfg["bluetooth"]["device_addr"],
             "bluetooth.enabled": self.cfg["bluetooth"]["enabled"],
             "location.method": self.cfg["location"]["method"],

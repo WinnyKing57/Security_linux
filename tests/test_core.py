@@ -280,3 +280,23 @@ def test_camera_resolve_autodetects(monkeypatch):
     mon2 = CameraMonitor({"enabled": True, "device": "/dev/video0"})
     expected = "/dev/video0" if __import__("os").path.exists("/dev/video0") else None
     assert mon2.resolve_device() == expected
+
+
+def test_camera_list_devices():
+    from security_linux.monitors.camera import CameraMonitor
+
+    devs = CameraMonitor.list_devices()
+    assert isinstance(devs, list)
+    assert all(dev.startswith("/dev/video") for dev in devs)
+    if __import__("os").path.exists("/dev/video0"):
+        assert "/dev/video0" in devs
+
+
+def test_camera_device_label_fallback():
+    from security_linux.monitors.camera import CameraMonitor
+
+    # chemin inexistant -> fallback sur le chemin
+    assert CameraMonitor.device_label("/dev/video99") == "/dev/video99"
+    # périphérique réel -> nom sysfs (ou fallback, mais toujours une chaîne)
+    label = CameraMonitor.device_label("/dev/video0")
+    assert isinstance(label, str) and label.strip() != ""
