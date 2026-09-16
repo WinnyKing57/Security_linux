@@ -307,7 +307,9 @@ class SecurityLinuxApp:
         if not howdy_ctrl.is_installed():
             self._msg("Howdy n'est pas installé sur ce système.", error=True)
             return
-        cmd = howdy_ctrl.enroll_command()
+        cfg = config.load_config()
+        device = cfg["camera"].get("device") or ""
+        cmd = howdy_ctrl.enroll_command(device)
         if not cmd:
             self._msg("Aucun terminal disponible pour l'enregistrement du visage.", error=True)
             return

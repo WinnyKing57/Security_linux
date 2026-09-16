@@ -58,24 +58,26 @@ def config_device_path() -> str:
     return "none"
 
 
-def enroll_command() -> list[str] | None:
+def enroll_command(device: str | None = None) -> list[str] | None:
     """Lancer l'enregistrement du visage (mot de passe root demandé).
 
-    Corrige d'abord device_path (Howdy refuse d'enregistrer quand il vaut
-    ``none`` ou un périphérique inexistant), puis lance ``howdy add``.
+    Utilise le périphérique passé en argument (celui sélectionné dans les
+    réglages de l'application) et corrige ``device_path`` dans
+    /etc/howdy/config.ini avant ``howdy add`` (Howdy refuse d'enregistrer
+    quand il vaut ``none`` ou un périphérique inexistant).
     """
     if not is_installed():
         return None
     terminal = shutil.which("x-terminal-emulator") or shutil.which("konsole") or shutil.which("gnome-terminal")
     if not terminal:
         return None
+    if not device or not os.path.exists(device):
+        device = detect_device_path()
     cmd = (
-        "dev=/dev/video0; "
-        "for i in 0 1 2 3 4 5 6 7; do [ -e /dev/video$i ] && dev=/dev/video$i && break; done; "
-        "sed -i \"s|^device_path.*|device_path = $dev|\" /etc/howdy/config.ini 2>/dev/null || true; "
-        "echo \"device_path -> $dev\"; "
+        "sed -i \"s|^device_path.*|device_path = {}|\" /etc/howdy/config.ini 2>/dev/null || true; "
+        "echo \"device_path -> {}\"; "
         "howdy add"
-    )
+    ).format(device, device)
     return [terminal, "-e", "sudo", "sh", "-c", cmd]
 
 

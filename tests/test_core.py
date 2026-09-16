@@ -309,3 +309,25 @@ def test_howdy_detect_device_path():
     assert path.startswith("/dev/video") if __import__("os").path.exists("/dev/video0") else path == "none"
     # config_device_path refuse de lire un fichier absent sans planter
     assert howdy_ctrl.config_device_path() in ("none", "/dev/video0", "/dev/video1")
+
+
+def test_howdy_enroll_command_uses_configured_device(monkeypatch):
+    from security_linux import howdy_ctrl
+
+    if not howdy_ctrl.is_installed():
+        import pytest
+
+        pytest.skip("howdy non installé")
+    import os
+
+    monkeypatch.setattr(howdy_ctrl.shutil, "which", lambda *_a, **_k: "/usr/bin/konsole")
+    # device configuré existant -> injecté dans la commande
+    cmd = howdy_ctrl.enroll_command("/dev/video0")
+    assert "device_path = /dev/video0" in cmd[-1]
+    # device configuré inexistant -> repli sur le périphérique détecté
+    cmd2 = howdy_ctrl.enroll_command("/dev/video99")
+    if os.path.exists("/dev/video0"):
+        assert "device_path = /dev/video0" in cmd2[-1] or "device_path = /dev/video1" in cmd2[-1]
+    # aucun device -> repli
+    cmd3 = howdy_ctrl.enroll_command()
+    assert "device_path =" in cmd3[-1]
