@@ -120,7 +120,9 @@ class SecurityLinuxApp:
         b_howdy.connect("clicked", lambda *_x: self.enroll_face())
         b_events = Gtk.Button(label="Journal")
         b_events.connect("clicked", lambda *_x: self.show_events())
-        for b in (b_lock, b_settings, b_howdy, b_events):
+        b_captures = Gtk.Button(label="Captures")
+        b_captures.connect("clicked", lambda *_x: self.show_captures())
+        for b in (b_lock, b_settings, b_howdy, b_events, b_captures):
             btn_row.pack_start(b, False, True, 0)
 
         footer = Gtk.Label(label=f"{APP_NAME} v{__version__} — analyse 100 % locale", xalign=0)
@@ -385,6 +387,156 @@ class SecurityLinuxApp:
         win.add(sw)
         win.show_all()
 
+    def show_captures(self):
+        """Affiche la visionneuse des captures avec option de suppression."""
+        from security_linux.monitors.camera import CameraMonitor  # noqa: PLC0415
+        import security_linux.config as cfg_module  # noqa: PLC0415
+        
+        captures_dir = cfg_module.data_dir() / "captures"
+        
+        # Récupérer la liste des fichiers de capture
+        capture_files = []
+        if captures_dir.exists():
+            capture_files = sorted(
+                [f for f in captures_dir.glob("*.jpg")],
+                key=lambda x: x.stat().st_mtime,
+                reverse=True
+            )
+        
+        win = Gtk.Window(title=f"Captures d'écran ({len(capture_files)} images)")
+        win.set_default_size(800, 600)
+        win.set_border_width(10)
+        
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        
+        # Barre d'outils avec boutons
+        toolbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        
+        btn_refresh = Gtk.Button(label="Actualiser")
+        btn_refresh.connect("clicked", lambda *_x: self._refresh_captures(win, grid, status_label))
+        toolbar.pack_start(btn_refresh, False, True, 0)
+        
+        btn_delete_all = Gtk.Button(label="Supprimer toutes les captures")
+        btn_delete_all.get_style_context().add_class("destructive-action")
+        btn_delete_all.connect("clicked", lambda *_x: self._delete_all_captures(win, grid, status_label))
+        toolbar.pack_end(btn_delete_all, False, True, 0)
+        
+        vbox.pack_start(toolbar, False, True, 0)
+        
+        # Grille pour les miniatures
+        sw = Gtk.ScrolledWindow()
+        sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        
+        grid = Gtk.FlowBox()
+        grid.set_selection_mode(Gtk.SelectionMode.NONE)
+        grid.set_homogeneous(True)
+        grid.set_column_spacing(10)
+        grid.set_row_spacing(10)
+        
+        # Ajouter les miniatures
+        for capture_file in capture_files[:100]:  # Limiter à 100 images
+            try:
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                    str(capture_file), width=200, height=150, preserve_aspect_ratio=True
+                )
+                img = Gtk.Image.new_from_pixbuf(pixbuf)
+                
+                # Bouton cliquable pour ouvrir l'image en grand
+                btn = Gtk.Button()
+                btn.add(img)
+                btn.set_tooltip_text(f"{capture_file.name}\n{capture_file.stat().st_mtime}")
+                btn.connect("clicked", lambda *_x, f=capture_file: self._open_capture_fullscreen(f))
+                
+                grid.add(btn)
+            except Exception:
+                continue
+        
+        sw.add(grid)
+        vbox.pack_start(sw, True, True, 0)
+        
+        # Label de statut
+        status_label = Gtk.Label(label=f"{len(capture_files)} capture(s) trouvée(s)")
+        vbox.pack_start(status_label, False, True, 0)
+        
+        win.add(vbox)
+        win.show_all()
+    
+    def _refresh_captures(self, win, grid, status_label):
+        """Rafraîchit la grille des captures."""
+        win.destroy()
+        self.show_captures()
+    
+    def _delete_all_captures(self, win, grid, status_label):
+        """Supprime toutes les captures après confirmation."""
+        from security_linux.monitors.camera import CameraMonitor  # noqa: PLC0415
+        import security_linux.config as cfg_module  # noqa: PLC0415
+        
+        captures_dir = cfg_module.data_dir() / "captures"
+        
+        confirm_dlg = Gtk.MessageDialog(
+            transient_for=win,
+            flags=Gtk.DialogFlags.MODAL,
+            type=Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.YES_NO,
+            message_format="Supprimer toutes les captures ?",
+        )
+        confirm_dlg.format_secondary_text(
+            f"Cette action va supprimer définitivement les {grid.get_children().__len__()} captures stockées.\n\nCette action est irréversible."
+        )
+        resp = confirm_dlg.run()
+        confirm_dlg.destroy()
+        
+        if resp != Gtk.ResponseType.YES:
+            return
+        
+        deleted_count = 0
+        if captures_dir.exists():
+            for capture_file in captures_dir.glob("*.jpg"):
+                try:
+                    capture_file.unlink()
+                    deleted_count += 1
+                except Exception:
+                    pass
+        
+        info_dlg = Gtk.MessageDialog(
+            transient_for=win,
+            flags=Gtk.DialogFlags.MODAL,
+            type=Gtk.MessageType.INFO,
+            buttons=Gtk.ButtonsType.OK,
+            message_format=f"{deleted_count} capture(s) supprimée(s).",
+        )
+        info_dlg.run()
+        info_dlg.destroy()
+        
+        win.destroy()
+        self.show_captures()
+    
+    def _open_capture_fullscreen(self, capture_file):
+        """Ouvre une capture en taille réelle dans une nouvelle fenêtre."""
+        win = Gtk.Window(title=capture_file.name)
+        win.set_default_size(1024, 768)
+        win.set_border_width(10)
+        
+        try:
+            pixbuf = GdkPixbuf.Pixbuf.new_from_file(str(capture_file))
+            img = Gtk.Image.new_from_pixbuf(pixbuf)
+            
+            sw = Gtk.ScrolledWindow()
+            sw.add(img)
+            win.add(sw)
+            win.show_all()
+        except Exception as exc:
+            error_dlg = Gtk.MessageDialog(
+                transient_for=win,
+                flags=Gtk.DialogFlags.MODAL,
+                type=Gtk.MessageType.ERROR,
+                buttons=Gtk.ButtonsType.OK,
+                message_format=f"Erreur lors de l'ouverture de l'image : {exc}",
+            )
+            error_dlg.run()
+            error_dlg.destroy()
+            win.destroy()
+
     def open_settings(self):
         SecuritySettingsDialog(self).run()
 
@@ -406,6 +558,7 @@ class SecuritySettingsDialog:
         nb.append_page(self._bluetooth_tab(), Gtk.Label(label="Bluetooth"))
         nb.append_page(self._location_tab(), Gtk.Label(label="Localisation"))
         nb.append_page(self._howdy_tab(), Gtk.Label(label="Howdy"))
+        nb.append_page(self._features_tab(), Gtk.Label(label="Fonctions avancées"))
         box.pack_start(nb, True, True, 0)
         box.show_all()
 
@@ -651,6 +804,105 @@ class SecuritySettingsDialog:
         )
         return v
 
+    def _features_tab(self):
+        """Onglet des fonctions avancées : Silentium et Mode braquage."""
+        v = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        
+        # --- Mode Silentium ---
+        silentium_frame = Gtk.Frame(label="Mode Silentium (heures nocturnes)")
+        silentium_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        silentium_box.set_margin_top(8)
+        silentium_box.set_margin_bottom(8)
+        silentium_box.set_margin_start(8)
+        silentium_box.set_margin_end(8)
+        
+        s = self.cfg.get("silentium", {})
+        self.silentium_enabled = Gtk.Switch(active=bool(s.get("enabled", False)))
+        self.silentium_start = self._spin(s.get("start_hour", 23), 0, 23, 1)
+        self.silentium_end = self._spin(s.get("end_hour", 7), 0, 23, 1)
+        
+        row1 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        row1.pack_start(Gtk.Label(label="Activer le mode Silentium", xalign=0), True, True, 0)
+        row1.pack_end(self.silentium_enabled, False, True, 0)
+        silentium_box.pack_start(row1, False, True, 0)
+        
+        row2 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        row2.pack_start(Gtk.Label(label="Heure de début (23 = 23h)", xalign=0), True, True, 0)
+        row2.pack_end(self.silentium_start, False, True, 0)
+        silentium_box.pack_start(row2, False, True, 0)
+        
+        row3 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        row3.pack_start(Gtk.Label(label="Heure de fin (7 = 7h)", xalign=0), True, True, 0)
+        row3.pack_end(self.silentium_end, False, True, 0)
+        silentium_box.pack_start(row3, False, True, 0)
+        
+        silentium_box.pack_start(
+            Gtk.Label(label="Pendant ces heures, le verrouillage automatique est désactivé.\n"
+                           "Utile pour les nuits où vous travaillez tard.",
+                      xalign=0),
+            False, True, 0,
+        )
+        silentium_frame.add(silentium_box)
+        v.pack_start(silentium_frame, False, True, 0)
+        
+        # --- Mode braquage ---
+        braquage_frame = Gtk.Frame(label="Mode braquage (alarme)")
+        braquage_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        braquage_box.set_margin_top(8)
+        braquage_box.set_margin_bottom(8)
+        braquage_box.set_margin_start(8)
+        braquage_box.set_margin_end(8)
+        
+        b = self.cfg.get("braquage", {})
+        self.braquage_enabled = Gtk.Switch(active=bool(b.get("enabled", False)))
+        self.braquage_duration = self._spin(b.get("alarm_duration", 5), 1, 60, 1)
+        
+        brow1 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        brow1.pack_start(Gtk.Label(label="Activer l'alarme sonore", xalign=0), True, True, 0)
+        brow1.pack_end(self.braquage_enabled, False, True, 0)
+        braquage_box.pack_start(brow1, False, True, 0)
+        
+        brow2 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        brow2.pack_start(Gtk.Label(label="Durée de l'alarme (secondes)", xalign=0), True, True, 0)
+        brow2.pack_end(self.braquage_duration, False, True, 0)
+        braquage_box.pack_start(brow2, False, True, 0)
+        
+        braquage_box.pack_start(
+            Gtk.Label(label="Une alarme sonore retentit en cas d'intrusion détectée.\n"
+                           "Attention : peut être bruyant !",
+                      xalign=0),
+            False, True, 0,
+        )
+        braquage_frame.add(braquage_box)
+        v.pack_start(braquage_frame, False, True, 0)
+        
+        # --- Notifications ---
+        notif_frame = Gtk.Frame(label="Notifications bureau")
+        notif_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        notif_box.set_margin_top(8)
+        notif_box.set_margin_bottom(8)
+        notif_box.set_margin_start(8)
+        notif_box.set_margin_end(8)
+        
+        self.notif_rearm = Gtk.Switch(active=True)  # Activé par défaut
+        
+        nrow1 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        nrow1.pack_start(Gtk.Label(label="Notifier lors du réarmement auto", xalign=0), True, True, 0)
+        nrow1.pack_end(self.notif_rearm, False, True, 0)
+        notif_box.pack_start(nrow1, False, True, 0)
+        
+        notif_box.pack_start(
+            Gtk.Label(label="Reçoit une notification quand le système se réarme\n"
+                           "(hors domicile ou hors ligne).",
+                      xalign=0),
+            False, True, 0,
+        )
+        notif_frame.add(notif_box)
+        v.pack_start(notif_frame, False, True, 0)
+        
+        v.pack_start(Gtk.Label(label="", xalign=0), True, True, 0)  # Spacer
+        return v
+
     def _spin(self, value, lo, hi, step):
         adj = Gtk.Adjustment(value=float(value), lower=float(lo), upper=float(hi), step_increment=float(step))
         return Gtk.SpinButton(adjustment=adj)
@@ -710,6 +962,16 @@ class SecuritySettingsDialog:
             self.app._msg("Aucun visage enregistré. Enregistrez votre visage avant d'activer Howdy.", error=True)
             want = False
         h["enabled"] = want
+
+        # Fonctions avancées
+        s = self.cfg.setdefault("silentium", {})
+        s["enabled"] = self.silentium_enabled.get_active()
+        s["start_hour"] = int(self.silentium_start.get_value())
+        s["end_hour"] = int(self.silentium_end.get_value())
+
+        bq = self.cfg.setdefault("braquage", {})
+        bq["enabled"] = self.braquage_enabled.get_active()
+        bq["alarm_duration"] = int(self.braquage_duration.get_value())
 
         config.save_config(self.cfg)
         # applique à chaud les réglages au démon
