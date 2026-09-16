@@ -37,14 +37,46 @@ def models_status() -> str:
         return "unknown"
 
 
+def detect_device_path() -> str:
+    """Premier /dev/video* présent, sinon "none" (reste la valeur défaut de howdy)."""
+    for index in range(16):
+        if os.path.exists(f"/dev/video{index}"):
+            return f"/dev/video{index}"
+    return "none"
+
+
+def config_device_path() -> str:
+    """device_path lu dans /etc/howdy/config.ini ("none" si absent/lisible)."""
+    try:
+        with open("/etc/howdy/config.ini", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.strip()
+                if line.startswith("device_path") and "=" in line:
+                    return line.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return "none"
+
+
 def enroll_command() -> list[str] | None:
-    """Commande lancer l'enregistrement du visage (demande le mot de passe root)."""
+    """Lancer l'enregistrement du visage (mot de passe root demandé).
+
+    Corrige d'abord device_path (Howdy refuse d'enregistrer quand il vaut
+    ``none`` ou un périphérique inexistant), puis lance ``howdy add``.
+    """
     if not is_installed():
         return None
     terminal = shutil.which("x-terminal-emulator") or shutil.which("konsole") or shutil.which("gnome-terminal")
-    if terminal:
-        return [terminal, "-e", "sudo", "howdy", "add"]
-    return None
+    if not terminal:
+        return None
+    cmd = (
+        "dev=/dev/video0; "
+        "for i in 0 1 2 3 4 5 6 7; do [ -e /dev/video$i ] && dev=/dev/video$i && break; done; "
+        "sed -i \"s|^device_path.*|device_path = $dev|\" /etc/howdy/config.ini 2>/dev/null || true; "
+        "echo \"device_path -> $dev\"; "
+        "howdy add"
+    )
+    return [terminal, "-e", "sudo", "sh", "-c", cmd]
 
 
 def install_script_path() -> str | None:

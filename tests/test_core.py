@@ -300,3 +300,12 @@ def test_camera_device_label_fallback():
     # périphérique réel -> nom sysfs (ou fallback, mais toujours une chaîne)
     label = CameraMonitor.device_label("/dev/video0")
     assert isinstance(label, str) and label.strip() != ""
+
+
+def test_howdy_detect_device_path():
+    from security_linux import howdy_ctrl
+
+    path = howdy_ctrl.detect_device_path()
+    assert path.startswith("/dev/video") if __import__("os").path.exists("/dev/video0") else path == "none"
+    # config_device_path refuse de lire un fichier absent sans planter
+    assert howdy_ctrl.config_device_path() in ("none", "/dev/video0", "/dev/video1")

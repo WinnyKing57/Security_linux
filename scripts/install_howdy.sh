@@ -100,9 +100,18 @@ if ! command -v howdy >/dev/null 2>&1; then
   die "binaire ‘howdy’ introuvable après installation."
 fi
 log "Howdy installé : OK"
-if [ -f /etc/howdy/config.ini ] && ! grep -q '^device_path' /etc/howdy/config.ini 2>/dev/null; then
-  echo "device_path = /dev/video0" >> /etc/howdy/config.ini
-  log "device_path ajouté dans /etc/howdy/config.ini"
+_DEV="none"
+for i in 0 1 2 3 4; do
+  if [ -e "/dev/video$i" ]; then _DEV="/dev/video$i"; break; fi
+done
+if [ -f /etc/howdy/config.ini ]; then
+  if grep -q '^device_path' /etc/howdy/config.ini 2>/dev/null; then
+    sed -i "s|^device_path.*|device_path = $_DEV|" /etc/howdy/config.ini
+  else
+    echo "device_path = $_DEV" >> /etc/howdy/config.ini
+  fi
+  sed -i "s|^device_path = none|device_path = $_DEV|" /etc/howdy/config.ini
+  log "device_path = $_DEV appliqué dans /etc/howdy/config.ini"
 fi
 log "Terminé. Enregistrer un visage → ‘sudo howdy add’ (ou bouton de l'application)."
 log "Journal : $LOG"
