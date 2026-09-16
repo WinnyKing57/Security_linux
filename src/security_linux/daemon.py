@@ -59,6 +59,13 @@ class Daemon:
         self._schedules[name] = now + mon.poll_seconds()
         return True
 
+    def _refresh_monitor_configs(self) -> None:
+        """Reprise de la config sur disque à chaque cycle (réglages à chaud)."""
+        self.engine.cfg = self.cfg
+        self.camera.cfg = self.cfg["camera"]
+        self.bluetooth.cfg = self.cfg["bluetooth"]
+        self.location.cfg = self.cfg["location"]
+
     def _consume_commands(self) -> None:
         cmd = events.consume_command()
         if not cmd:
@@ -98,6 +105,8 @@ class Daemon:
 
         while True:
             try:
+                self.cfg = config.load_config()
+                self._refresh_monitor_configs()
                 self._consume_commands()
                 for name, mon in (
                     ("camera", self.camera),
