@@ -1,0 +1,2 @@
+opencv-python-headless>=4.8,<5
+# dbus-python et PyGObject sont fournis par le système (Debian trixie)

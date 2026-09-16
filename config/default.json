@@ -1,0 +1,39 @@
+{
+  "general": {
+    "armed": true,
+    "decision_mode": "AND",
+    "lock_grace_seconds": 10,
+    "min_absent_seconds": 20,
+    "auto_lock_repeat_minutes": 3
+  },
+  "camera": {
+    "enabled": true,
+    "device": "/dev/video0",
+    "poll_seconds": 5,
+    "absent_confirmations": 3,
+    "capture_on_lock": true
+  },
+  "bluetooth": {
+    "enabled": true,
+    "device_addr": "",
+    "poll_seconds": 10,
+    "absent_confirmations": 3,
+    "min_rssi": -70
+  },
+  "location": {
+    "method": "wifi",
+    "home_ssids": [],
+    "secure_when_offline": true,
+    "home_lat": 0.0,
+    "home_lon": 0.0,
+    "radius_km": 1.0
+  },
+  "howdy": {
+    "enabled": false,
+    "require_face_before_enable": true
+  },
+  "admin_code": {
+    "salt": "",
+    "hash": ""
+  }
+}

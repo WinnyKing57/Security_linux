@@ -1,0 +1,118 @@
+"""Configuration de l'application (JSON, permissions restreintes).
+
+Emplacement par défaut : ~/.config/security-linux/config.json
+"""
+import copy
+import json
+import os
+from pathlib import Path
+
+import security_linux.hashing as hashing
+import security_linux.runtime as runtime
+
+DEFAULT_CONFIG = {
+    "general": {
+        "armed": True,
+        "decision_mode": "AND",
+        "lock_grace_seconds": 10,
+        "auto_lock_repeat_minutes": 3,
+    },
+    "camera": {
+        "enabled": True,
+        "device": "/dev/video0",
+        "poll_seconds": 5,
+        "absent_confirmations": 3,
+        "capture_on_lock": True,
+    },
+    "bluetooth": {
+        "enabled": True,
+        "device_addr": "",
+        "poll_seconds": 10,
+        "absent_confirmations": 3,
+        "min_rssi": -70,
+    },
+    "location": {
+        "method": "wifi",
+        "home_ssids": [],
+        "secure_when_offline": True,
+        "home_lat": 0.0,
+        "home_lon": 0.0,
+        "radius_km": 1.0,
+    },
+    "howdy": {
+        "enabled": False,
+        "require_face_before_enable": True,
+    },
+    "admin_code": {
+        "salt": "",
+        "hash": "",
+    },
+}
+
+CONFIG_DIR_ENV = "SECURITY_LINUX_CONFIG_DIR"
+
+
+def config_dir() -> Path:
+    if runtime.is_debug():
+        return runtime.debug_root() / "config"
+    override = os.environ.get(CONFIG_DIR_ENV)
+    if override:
+        return Path(override)
+    base = Path(os.environ.get("XDG_CONFIG_HOME", "~/.config")).expanduser()
+    return base / "security-linux"
+
+
+def data_dir() -> Path:
+    if runtime.is_debug():
+        return runtime.debug_root() / "data"
+    base = Path(os.environ.get("XDG_DATA_HOME", "~/.local/share")).expanduser()
+    return base / "security-linux"
+
+
+def default_config_path() -> Path:
+    return config_dir() / "config.json"
+
+
+def _deep_merge(base: dict, override: dict) -> dict:
+    merged = copy.deepcopy(base)
+    for key, value in override.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = copy.deepcopy(value)
+    return merged
+
+
+def load_config(path: Path | None = None) -> dict:
+    path = path or default_config_path()
+    if not path.exists():
+        return copy.deepcopy(DEFAULT_CONFIG)
+    try:
+        raw = json.loads(path.read_text("utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return copy.deepcopy(DEFAULT_CONFIG)
+    return _deep_merge(DEFAULT_CONFIG, raw)
+
+
+def save_config(cfg: dict, path: Path | None = None) -> None:
+    path = path or default_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), "utf-8")
+    tmp.chmod(0o600)
+    os.replace(tmp, path)
+
+
+def has_admin_code(cfg: dict) -> bool:
+    return bool(cfg["admin_code"]["hash"]) and bool(cfg["admin_code"]["salt"])
+
+
+def set_admin_code(cfg: dict, code: str) -> None:
+    cfg["admin_code"]["salt"] = hashing.generate_salt()
+    cfg["admin_code"]["hash"] = hashing.hash_code(code, cfg["admin_code"]["salt"])
+
+
+def verify_admin_code(cfg: dict, code: str) -> bool:
+    if not has_admin_code(cfg):
+        return False
+    return hashing.verify_code(code, cfg["admin_code"]["salt"], cfg["admin_code"]["hash"])
