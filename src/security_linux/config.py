@@ -18,6 +18,7 @@ DEFAULT_CONFIG = {
         "decision_mode": "AND",
         "lock_grace_seconds": 10,
         "auto_lock_repeat_minutes": 3,
+        "min_absent_seconds": 20,
     },
     "camera": {
         "enabled": True,
@@ -49,6 +50,15 @@ DEFAULT_CONFIG = {
         "salt": "",
         "hash": "",
         "failed_attempts": [],
+    },
+    "silentium": {
+        "enabled": False,
+        "start_hour": 23,
+        "end_hour": 7,
+    },
+    "braquage": {
+        "enabled": False,
+        "alarm_duration": 5,
     },
 }
 
@@ -147,3 +157,30 @@ def verify_admin_code(cfg: dict, code: str) -> bool:
     save_config(cfg)
     events.log_event("security", f"échec authentification admin ({len(recent)}/{max_attempts})")
     return False
+
+
+def is_silentium_active(cfg: dict) -> bool:
+    """Vérifie si le mode Silentium est actif (heures nocturnes).
+    
+    Le mode Silentium désactive le verrouillage automatique pendant
+    les heures nocturnes configurées (par défaut 23h-7h).
+    
+    Retourne True si on est dans la plage horaire Silentium.
+    """
+    silentium_cfg = cfg.get("silentium", {})
+    if not silentium_cfg.get("enabled", False):
+        return False
+    
+    from datetime import datetime  # noqa: PLC0415
+    
+    current_hour = datetime.now().hour
+    start_hour = int(silentium_cfg.get("start_hour", 23))
+    end_hour = int(silentium_cfg.get("end_hour", 7))
+    
+    # Gestion des plages qui traversent minuit (ex: 23h-7h)
+    if start_hour > end_hour:
+        # Plage nocturne (ex: 23h à 7h)
+        return current_hour >= start_hour or current_hour < end_hour
+    else:
+        # Plage diurne (ex: 14h à 16h)
+        return start_hour <= current_hour < end_hour

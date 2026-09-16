@@ -1,0 +1,3 @@
+[console_scripts]
+security-linux = security_linux.cli:main
+security-linuxd = security_linux.daemon:main
