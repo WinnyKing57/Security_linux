@@ -45,3 +45,21 @@ def enroll_command() -> list[str] | None:
     if terminal:
         return [terminal, "-e", "sudo", "howdy", "add"]
     return None
+
+
+def install_script_path() -> str | None:
+    """Chemin du script d'installation de Howdy fourni dans le dépôt."""
+    repo = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    candidate = os.path.join(repo, "scripts", "install_howdy.sh")
+    return candidate if os.path.isfile(candidate) else None
+
+
+def install_command(script: str) -> list[str] | None:
+    """Commande de lancement de l'installation Howdy (root via pkexec, GUI)."""
+    pkexec = shutil.which("pkexec")
+    if not pkexec:
+        return None
+    terminal = shutil.which("x-terminal-emulator") or shutil.which("konsole") or shutil.which("gnome-terminal")
+    if terminal:
+        return [terminal, "-e", pkexec, script]
+    return [pkexec, script]

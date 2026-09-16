@@ -57,6 +57,9 @@
 - Parse `bluetoothctl info <MAC>` pour lire Connected et RSSI
 - Déclenche un scan court (3s) si l'appareil n'est pas trouvé
 - Pas de dépendance externe, pas besoin de root
+- Le détail affiché indique le NOM de l'appareil surveillé et, s'il est absent,
+  les autres appareils connectés (diagnostic clair : « le téléphone n'est pas
+  joignable, mais le casque est connecté »)
 
 ### Localisation
 
@@ -211,3 +214,6 @@ installation ni à des données réelles, sur n'importe quelle machine ».
 6. Notification KDE quand l'ordinateur se réarme automatiquement
 7. Traductions (i18n)
 8. Tests d'intégration en conditions réelles (éloignement Bluetooth)
+9. Installation de Howdy depuis le code source : bouton dans Réglages → Howdy
+   qui lance `scripts/install_howdy.sh` (pkexec, compilations meson + dlib,
+   activation PAM, téléchargement des modèles) — v2.

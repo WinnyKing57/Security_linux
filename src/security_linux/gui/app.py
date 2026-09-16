@@ -312,6 +312,41 @@ class SecurityLinuxApp:
             self._msg("Aucun terminal disponible pour l'enregistrement du visage.", error=True)
             return
         subprocess.Popen(cmd, start_new_session=True)
+
+    def _launch_howdy_install(self):
+        script = howdy_ctrl.install_script_path()
+        if not script:
+            self._msg("Script d'installation Howdy introuvable dans le dépôt.", error=True)
+            return
+        dlg = Gtk.MessageDialog(
+            transient_for=self.window,
+            flags=Gtk.DialogFlags.MODAL,
+            type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.OK_CANCEL,
+            message_format="Installer Howdy (déverrouillage facial)",
+        )
+        dlg.format_secondary_text(
+            "L'installation compile Howdy depuis le code source inclus dans le dépôt.\n\n"
+            "- mot de passe root demandé (fenêtre pkexec / console)\n"
+            "- durée : plusieurs minutes (compilation dlib)\n"
+            "- nécessite une connexion Internet pour les dépendances et modèles\n\n"
+            "Voulez-vous lancer l'installation ?"
+        )
+        dlg.show_all()
+        resp = dlg.run()
+        dlg.destroy()
+        if resp != Gtk.ResponseType.OK:
+            return
+        cmd = howdy_ctrl.install_command(script)
+        if not cmd:
+            self._msg("pkexec est nécessaire pour l'installation (paquet policykit-1).", error=True)
+            return
+        try:
+            subprocess.Popen(cmd, start_new_session=True)
+            self._msg("Installation lancée dans une fenêtre root. Vérifiez son avancement, puis\n"
+                      "réouvrez ces réglages pour activer Howdy après enregistrement du visage (bouton « Enregistrer mon visage »).")
+        except OSError as exc:
+            self._msg(f"Impossible de lancer l'installation : {exc}", error=True)
         self._msg("Terminal d'enregistrement ouvert (sudo howdy add). Suivez les instructions.")
 
     def _msg(self, text, error=False):
@@ -476,6 +511,17 @@ class SecuritySettingsDialog:
         row.pack_end(self.howdy_enabled, False, True, 0)
         v.pack_start(row, False, True, 0)
         v.pack_start(state_label, False, True, 0)
+
+        if not howdy_ctrl.is_installed():
+            btn_install = Gtk.Button(label="Installer Howdy (via terminal root)")
+            btn_install.connect("clicked", lambda *_x: self.app._launch_howdy_install())
+            v.pack_start(btn_install, False, True, 0)
+        else:
+            btn_reinstall = Gtk.Button(label="Recompiler Howdy (optionnel)")
+            btn_reinstall.set_tooltip_text("Reconstruire et réinstaller Howdy depuis le code source (root)")
+            btn_reinstall.connect("clicked", lambda *_x: self.app._launch_howdy_install())
+            v.pack_start(btn_reinstall, False, True, 0)
+
         v.pack_start(
             Gtk.Label(label="Un visage doit être enregistré avant d'activer Howdy.\n"
                            "Le déverrouillage v1 reste le mot de passe de session.",
