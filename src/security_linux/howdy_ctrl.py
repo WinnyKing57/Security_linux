@@ -16,24 +16,30 @@ def is_installed() -> bool:
     return shutil.which("howdy") is not None
 
 
-def _models_dir() -> str:
-    user = os.environ.get("USER") or os.environ.get("LOGNAME") or ""
-    return f"/etc/howdy/models/{user}"
+def models_status(model_dir: str | None = None) -> str:
+    """Retourne "ok" (visages présents), "none" (aucun) ou "unknown" (non lisible).
 
-
-def models_status() -> str:
-    """Retourne "ok" (visages présents), "none" (aucun), ou "unknown" (non lisible)."""
+    Howdy stocke le visage de l'utilisateur soit dans
+    ``/etc/howdy/models/<user>.dat`` (fichier unique), soit dans un répertoire
+    ``/etc/howdy/models/<user>/`` (styles d'encodage anciens). Les deux formes
+    sont détectées. ``model_dir`` permet de tester un autre emplacement.
+    """
     if not is_installed():
         return "not_installed"
-    path = _models_dir()
-    if not os.path.isdir(path):
-        return "none"
+    user = os.environ.get("USER") or os.environ.get("LOGNAME") or ""
+    model_dir = model_dir or "/etc/howdy/models"
     try:
-        entries = [e for e in os.listdir(path) if os.path.isfile(os.path.join(path, e))]
-        if entries:
+        if not os.path.isdir(model_dir):
+            return "none"
+        if os.path.isfile(os.path.join(model_dir, f"{user}.dat")):
             return "ok"
+        user_dir = os.path.join(model_dir, user)
+        if os.path.isdir(user_dir):
+            entries = [e for e in os.listdir(user_dir) if os.path.isfile(os.path.join(user_dir, e))]
+            if entries:
+                return "ok"
         return "none"
-    except PermissionError:
+    except (PermissionError, OSError):
         return "unknown"
 
 

@@ -331,3 +331,28 @@ def test_howdy_enroll_command_uses_configured_device(monkeypatch):
     # aucun device -> repli
     cmd3 = howdy_ctrl.enroll_command()
     assert "device_path =" in cmd3[-1]
+
+
+def test_howdy_models_status_detects_dat_file(monkeypatch):
+    from security_linux import howdy_ctrl
+
+    import os
+    import tempfile
+
+    model_dir = os.path.join(tempfile.mkdtemp(), "models")
+    os.makedirs(model_dir, exist_ok=True)
+    monkeypatch.setenv("USER", "testuser")
+    # répertoire vide -> none (pas d'exception)
+    assert howdy_ctrl.models_status(model_dir) == "none"
+    # fichier <user>.dat présent -> ok
+    with open(os.path.join(model_dir, "testuser.dat"), "w"):
+        pass
+    assert howdy_ctrl.models_status(model_dir) == "ok"
+    # répertoire <user>/ contenant des fichiers -> ok
+    os.remove(os.path.join(model_dir, "testuser.dat"))
+    os.makedirs(os.path.join(model_dir, "testuser"))
+    with open(os.path.join(model_dir, "testuser", "encodings"), "w"):
+        pass
+    assert howdy_ctrl.models_status(model_dir) == "ok"
+    # répertoire absent -> none
+    assert howdy_ctrl.models_status("/tmp/does-not-exist-xyz") == "none"
