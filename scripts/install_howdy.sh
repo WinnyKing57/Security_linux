@@ -26,15 +26,18 @@ fi
 log "Installation de Howdy (build depuis le dépôt) — journal : $LOG"
 
 # --- 1. dépendances -------------------------------------------------
-log "apt: mise à jour + dépendances de compilation (dlib/inih/evdev/opencv)…"
-export DEBIAN_FRONTEND=noninteractive
+log "apt: mise à jour (en root)…"
 apt-get update -qq || true
+log "apt: installation des dépendances de compilation (dlib/inih/evdev/opencv)…"
+export DEBIAN_FRONTEND=noninteractive
+# NB: python3-dlib et pam-auth-update ne sont PAS des paquets Debian trixie ;
+#     dlib Python est déjà présent (20.0.1) et pam-auth-update provient de libpam-runtime.
 apt-get install -y --no-install-recommends \
   build-essential cmake ninja-build meson pkg-config \
   python3-dev python3-numpy python3-opencv libopencv-dev \
-  libdlib-dev python3-dlib libinih-dev libevdev-dev \
-  libpam0g-dev libboost-dev libboost-python-dev \
-  wget bzip2 ca-certificates pam-auth-update \
+  libpam0g-dev libevdev-dev \
+  libboost-dev libboost-python-dev \
+  wget bzip2 ca-certificates \
   || true
 
 log "python dlib : $(python3 -c 'import dlib; print("OK", dlib.__version__)' 2>/dev/null || echo 'ABSENT → compilation pip (long)…')"

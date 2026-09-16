@@ -127,4 +127,8 @@ debian/howdy
 *.vsix
 
 # Meson
-subprojects/
+subprojects/*
+!subprojects/inih/
+
+# build howdy (créé par scripts/install_howdy.sh)
+.build-howdy/
