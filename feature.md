@@ -206,9 +206,15 @@ installation ni à des données réelles, sur n'importe quelle machine ».
 
 ## 9. Prochaines étapes (v2)
 
+### ✅ Tâches terminées :
+10. **Instance unique** : empêcher le lancement de plusieurs instances de l'application GUI — **TERMINÉ** (lock file)
+11. **Correction authentification admin** : dysfonctionnement de la désactivation par mot de passe corrigé — **TERMINÉ**
+12. **Anti-bruteforce** : limitation à 3 tentatives de code admin par 10 minutes — **TERMINÉ**
+
+### ❌ Tâches restantes :
 1. Installer Howdy depuis le fork source (meson) et activer le déblocage facial
 2. Enregistrement du visage via la GUI
-3. Mode «braquage » (alarme sonore sur tentative d'intrusion)
+3. Mode « braquage » (alarme sonore sur tentative d'intrusion)
 4. Journal des captures avec visionneuse intégrée
 5. Mode Silentium (exclure des heures la nuit)
 6. Notification KDE quand l'ordinateur se réarme automatiquement
@@ -217,6 +223,3 @@ installation ni à des données réelles, sur n'importe quelle machine ».
 9. Installation de Howdy depuis le code source : bouton dans Réglages → Howdy
    qui lance `scripts/install_howdy.sh` (pkexec, compilations meson + dlib,
    activation PAM, téléchargement des modèles) — v2.
-10. **Instance unique** : empêcher le lancement de plusieurs instances de l'application GUI
-11. **Correction authentification admin** : investiguer et corriger le dysfonctionnement de la désactivation par mot de passe
-12. **Anti-bruteforce** : limiter à 3 tentatives de code admin par 10 minutes
