@@ -1,6 +1,6 @@
 # Security-Linux
 
-Verrouillage automatique d'écran et sécurité de bureau — **100 % local**, aucune donnée envoyée sur Internet.
+Verrouillage automatique d'écran et sécurité de bureau — **100 % local**, aucune donnée envoyée sur Internet. *(v0.2.0)*
 
 ## Fonctionnalités
 
@@ -11,6 +11,9 @@ Verrouillage automatique d'écran et sécurité de bureau — **100 % local**, a
 | **Localisation** | Wi-Fi SSID « maison » ou GPS (optionnel). Hors domicile = réarmé. | 100 % local |
 | **Howdy** | Reconnaissance faciale PAM (dormant en v1, activable manuellement). | 100 % local |
 | **Code admin** | Désactivation de l'interrupteur = code requis (haché PBKDF2, jamais en clair). | Sécurisé UI |
+| **Mode Silentium** | Suspend l'auto-verrouillage pendant les heures nocturnes configurées. | Configurable |
+| **Mode braquage** | Alarme sonore en cas de verrouillage automatique (tentative d'intrusion). | Configurable |
+| **Notifications** | Alerte bureau quand le système se réarme automatiquement (hors domicile/ligne). | Configurable |
 
 ### Règle de verrouillage
 
@@ -46,14 +49,21 @@ security-linux
 # Lance le démon (démarre aussi via autostart KDE)
 security-linuxd
 
+# Donne l'état courant (captures en arrière-plan)
+security-linux status
+
+# Arme / désarme le système (le déarmement demande le code admin)
+security-linux arm
+security-linux disarm
+
 # Verrouille l'écran immédiatement
 security-linux lock-now
 
-# État courant (captures en arrière-plan)
-security-linux status
-
-# Définir le code admin
+# Définir / changer le code admin
 security-linux set-code
+
+# Liste les appareils Bluetooth appariés (pour les réglages)
+security-linux list-bt
 ```
 
 ## États de l'application
@@ -105,6 +115,36 @@ Renseignez le ou les SSID de votre réseau domestique. Quand l'ordinateur est co
 
 Activé par défaut. Si l'ordinateur perd toute connexion réseau (WiFi + Ethernet), le système se considère comme « hors domicile » et s'arme automatiquement. Désactiver cette option via l'application ou le fichier de config.
 
+## Fonctions avancées (v0.2)
+
+Configurables dans l'application → **Réglages → Fonctions avancées**.
+
+### Mode Silentium
+
+Suspend le **verrouillage automatique** pendant une plage horaire (défaut 23h → 7h), pour les nuits où vous travaillez. Le verrouillage manuel et la protection restent actifs : seul l'auto-verrouillage est mis en pause. L'état est visible dans l'écran principal (« Silentium : actif »).
+
+```json
+"silentium": { "enabled": false, "start_hour": 23, "end_hour": 7 }
+```
+
+### Mode braquage
+
+Joue une **alarme sonore** (sirène) quand le système verrouille automatiquement du fait d'une absence détectée — un moyen de dissuader une personne non autorisée. La durée est configurable (défaut 5 s).
+
+> L'alarme ne sonne **pas** en mode debug (verrouillage simulé).
+
+```json
+"braquage": { "enabled": false, "alarm_duration": 5 }
+```
+
+### Notifications bureau
+
+Une notification est envoyée (KDE/GNOME via `notify-send`) quand le système se **réarme automatiquement** (hors domicile ou hors ligne). Désactivable dans les réglages.
+
+```json
+"notifications": { "rearm": true }
+```
+
 ## Sécurité
 
 | Aspect | Détail |
@@ -129,7 +169,8 @@ Activé par défaut. Si l'ordinateur perd toute connexion réseau (WiFi + Ethern
 src/security_linux/
 ├── cli.py              # CLI (security-linux, security-linuxd)
 ├── daemon.py           # Démon de surveillance (boucle 1s)
-├── engine.py           # Moteur de décision (AND/OR, grâce, réarmement)
+├── engine.py           # Moteur de décision (AND/OR, grâce, réarmement, Silentium)
+├── alerts.py           # Alarme sonore (braquage) + notifications bureau
 ├── lock.py             # Verrouillage d'écran (loginctl / qdbus)
 ├── config.py           # Config JSON + hachage code admin
 ├── events.py           # Journal + état partagé (state.json / command.json)
@@ -142,7 +183,7 @@ src/security_linux/
 │   ├── bluetooth.py    # BlueZ (bluetoothctl)
 │   └── location.py     # nmcli (Wi-Fi) / GeoClue (GPS)
 └── gui/
-    └── app.py          # GTK3 (interrupteur, réglages, tray)
+    └── app.py          # GTK3 (interrupteur, réglages, capture viewer, tray)
 ```
 
 ## Technologies

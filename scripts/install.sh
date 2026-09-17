@@ -36,7 +36,7 @@ DISTRO="$(detect_distro)"
 echo "==> Distribution détectée : $DISTRO"
 
 DEBIAN_PKGS=(python3-dbus python3-gi python3-gi-cairo gir1.2-gtk-3.0 python3-opencv bluetooth bluez network-manager v4l-utils)
-FEDORA_PKGS=(python3-gobject python3-dbus python3-gi-cairo python3-opencv gtk3 bluez bluez-tools NetworkManager v4l-utils)
+FEDORA_PKGS=(python3-gobject python3-dbus python3-opencv gtk3 bluez bluez-tools NetworkManager v4l-utils)
 ARCH_PKGS=(python-gobject python-dbus opencv gtk3 bluez bluez-utils networkmanager v4l-utils)
 OPENSUSE_PKGS=(python3-gobject python3-dbus python3-opencv gtk3 bluez bluez-tools NetworkManager v4l-utils)
 
@@ -48,9 +48,11 @@ install_system_packages() {
     return 0
   fi
   echo "==> Paquets système ($DISTRO) — mot de passe éventuellement demandé"
+  # Toute étape est facultative : on ne fait jamais échouer l'installation
+  # de l'application à cause d'un mot de passe manquant ou d'un paquet absent.
   case "$DISTRO" in
     debian)
-      sudo apt-get update -qq
+      sudo apt-get update -qq || true
       sudo apt-get install -y --no-install-recommends "${DEBIAN_PKGS[@]}" || true;;
     fedora)
       sudo dnf install -y "${FEDORA_PKGS[@]}" || true;;

@@ -213,12 +213,16 @@ installation ni à des données réelles, sur n'importe quelle machine ».
 13. **Bouton installation Howdy** : bouton dans Réglages → Howdy qui lance `scripts/install_howdy.sh` — **TERMINÉ** (lignes 636-644 app.py)
 14. **Enregistrement visage via GUI** : bouton "Enregistrer mon visage" ouvrant terminal howdy — **TERMINÉ** (ligne 120, méthode `enroll_face()`)
 
-### ❌ Tâches restantes :
-
-1. **Mode "braquage"** - alarme sonore sur tentative d'intrusion — **TERMINÉ** (alerts.py, config.py, GUI)
+### ✅ Tâches v0.2.0 terminées :
+1. **Mode "braquage"** - alarme sonore sur tentative d'intrusion — **TERMINÉ** et **intégré** (v0.2.0 : `alerts.play_alarm()` branché dans `daemon.py::_trigger_braquage()`, en thread pour ne pas bloquer le démon)
 2. **Visionneuse des captures** - bouton et interface pour visualiser/supprimer les images capturées — **TERMINÉ** (app.py show_captures())
-3. **Mode Silentium** - option pour exclure des heures nocturnes du verrouillage auto — **TERMINÉ** (config.py is_silentium_active(), GUI)
-4. **Notification KDE réarmement** - notification système quand l'ordinateur se réarme automatiquement — **TERMINÉ** (alerts.py send_rearm_notification())
-5. **Traductions (i18n)** - système complet de localisation (fichiers .po/.mo, gettext) — **À DÉFINIR** (non prioritaire)
-6. **Tests Bluetooth conditions réelles** - validation en conditions réelles d'éloignement — **À FAIRE** (nécessite test physique)
-7. **Packaging Linux** - créer un package compatible toutes distributions — **À FAIRE** (voir section ci-dessous)
+3. **Mode Silentium** - option pour exclure des heures nocturnes du verrouillage auto — **TERMINÉ** et **intégré** (v0.2.0 : `is_silentium_active()` consulté dans `engine.py::tick()`, état publié et affiché dans la GUI)
+4. **Notification KDE réarmement** - notification système quand l'ordinateur se réarme automatiquement — **TERMINÉ** et **intégré** (v0.2.0 : `send_rearm_notification()` appelé dans `daemon.py::_maybe_notify_rearm()`, interrupteur persisté)
+6. **Correction instance unique (renforcée)** — **TERMINÉ** v0.2.0 : récupération des verrous orphelins (vérification PID vivant), `atexit` + signaux, plus de fallback `/tmp`, pas de troncature avant `flock`
+7. **Correction désarmement admin (renforcée)** — **TERMINÉ** v0.2.0 : `on_armed_toggle` renvoie `True` sur échec (l'interrupteur ne reste plus visuellement DÉSARMÉ), config rechargée du disque avant vérification, flux sans code simplifié, `disarm`/`arm` CLI persistent la config
+8. **Packaging (script d'installation multi-distro)** — **TERMINÉ** v0.2.0 : `scripts/install.sh` auto-détecte Debian/Ubuntu, Fedora, Arch/Manjaro et openSUSE (apt/dnf/pacman/zypper)
+
+### ❌ Tâches restantes :
+1. **Traductions (i18n)** - système complet de localisation (fichiers .po/.mo, gettext) — **À DÉFINIR** (non prioritaire)
+2. **Tests Bluetooth conditions réelles** - validation en conditions réelles d'éloignement — **À FAIRE** (nécessite test physique)
+3. **Paquets natifs .deb/.rpm (optionnel)** - désormais facilité par le script d'installation ; des paquets natifs via CI restent possibles — **À FAIRE** (optionnel)

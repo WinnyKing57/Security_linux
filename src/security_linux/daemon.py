@@ -8,6 +8,7 @@ import argparse
 import os
 import signal
 import sys
+import threading
 import time
 
 import security_linux.alerts as alerts
@@ -158,16 +159,25 @@ class Daemon:
             time.sleep(_WATCH)
 
     def _trigger_braquage(self) -> None:
-        """Mode braquage : alarme sonore sur verrouillage automatique."""
+        """Mode braquage : alarme sonore sur verrouillage automatique.
+
+        L'alarme joue dans un thread détaché pour ne pas bloquer la boucle
+        de surveillance (sinon le démon ne répondrait plus pendant toute la
+        durée de l'alarme, y compris aux commandes de désarmement).
+        """
         brq = self.cfg.get("braquage", {})
         if not brq.get("enabled", False):
             return
-        try:
-            duration = int(brq.get("alarm_duration", 5))
-            alerts.play_alarm(duration)
-            events.log_event("alarm", f"alarme sonore déclenchée ({duration}s, mode braquage)")
-        except Exception as exc:  # noqa: BLE001
-            events.log_event("error", f"alarme: {exc}")
+        duration = int(brq.get("alarm_duration", 5))
+
+        def _play():
+            try:
+                alerts.play_alarm(duration)
+                events.log_event("alarm", f"alarme sonore déclenchée ({duration}s, mode braquage)")
+            except Exception as exc:  # noqa: BLE001
+                events.log_event("error", f"alarme: {exc}")
+
+        threading.Thread(target=_play, daemon=True).start()
 
     def _maybe_notify_rearm(self, decision: dict) -> None:
         """Notification bureau quand le système se réarme automatiquement."""
