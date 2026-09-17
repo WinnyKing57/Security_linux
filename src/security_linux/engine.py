@@ -20,8 +20,11 @@ from security_linux.monitors import MonitorResult
 
 
 def effective_armed(manual_armed: bool, loc: MonitorResult | None, secure_when_offline: bool) -> dict:
-    away = loc is not None and loc.at_home is not None and not loc.at_home
-    offline = loc is not None and loc.offline is True
+    # Localisation non configurée (statut "unconfigured") : neutre — on ne
+    # force jamais de réarmement sur une donnée inconnue (ex. SSID 'maison' vide).
+    loc_conf = loc is not None and getattr(loc, "status", "") != "unconfigured"
+    away = loc_conf and loc.at_home is not None and not loc.at_home
+    offline = loc_conf and loc.offline is True
     force_away = away or (offline and secure_when_offline)
     return {
         "manual": bool(manual_armed),

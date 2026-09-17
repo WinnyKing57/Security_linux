@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: security-linux
-Version: 0.1.0
+Version: 0.2.1
 Summary: Verrouillage automatique d'écran (webcam + bluetooth + localisation) et intégration Howdy - 100% local
 License: MIT
 Requires-Python: >=3.10
@@ -11,7 +11,7 @@ Requires-Dist: pytest>=7; extra == "dev"
 
 # Security-Linux
 
-Verrouillage automatique d'écran et sécurité de bureau — **100 % local**, aucune donnée envoyée sur Internet.
+Verrouillage automatique d'écran et sécurité de bureau — **100 % local**, aucune donnée envoyée sur Internet. *(v0.2.1)*
 
 ## Fonctionnalités
 
@@ -19,25 +19,37 @@ Verrouillage automatique d'écran et sécurité de bureau — **100 % local**, a
 |---|---|---|
 | **Webcam** | Détection de visage (OpenCV, Haar) locale. Aucun visage = absent. | Oui (si webcam disponible) |
 | **Bluetooth** | Mesure la présence d'un téléphone, tablette ou montre via BlueZ local. | Oui (RSSI/local) |
-| **Localisation** | Wi-Fi SSID « maison » ou GPS (optionnel). Hors domicile = réarmé. | 100 % local |
+| **Localisation** | Wi-Fi SSID « maison » ou GPS (optionnel). Hors domicile = réarmé. Tant que la liste « maison » est vide (non configurée), la localisation est **neutre** : aucun réarmement forcé. | 100 % local |
 | **Howdy** | Reconnaissance faciale PAM (dormant en v1, activable manuellement). | 100 % local |
 | **Code admin** | Désactivation de l'interrupteur = code requis (haché PBKDF2, jamais en clair). | Sécurisé UI |
+| **Mode Silentium** | Suspend l'auto-verrouillage pendant les heures nocturnes configurées. | Configurable |
+| **Mode braquage** | Alarme sonore en cas de verrouillage automatique (tentative d'intrusion). | Configurable |
+| **Notifications** | Alerte bureau quand le système se réarme automatiquement (hors domicile/ligne). | Configurable |
 
 ### Règle de verrouillage
 
 - Mode **AND** (défaut) : verrouille quand la webcam VOIT aucun visage **ET** l'appareil Bluetooth est injoignable, pendant un délai configurable (défaut 20 s).
 - Mode **OR** : dès qu'un seul capteur dit « absent ».
 - **Délai de grâce** (défaut 10 s) avant verrouillage pour éviter les faux positifs.
-- **Réarmement automatique** : hors domicile ou hors ligne (mode « sécurisé hors-ligne » activable) → le système se réarme tout seul, même si l'interrupteur était coupé.
+- **Réarmement automatique** : hors domicile ou hors ligne (mode « sécurisé hors-ligne » activable) → le système se réarme tout seul, même si l'interrupteur était coupé. Uniquement si la localisation est **configurée** (au moins un SSID « maison ») ; sinon le statut est « non configuré » et n'arme/désarme jamais de force.
 
 ## Installation
 
 ```bash
-cd security_linux
+git clone https://github.com/WinnyKing57/Security_linux.git
+cd Security_linux
 ./scripts/install.sh
 ```
 
-Cela crée un environnement Python virtuel (`~/.venv`), installe les dépendances, configure le démarrage automatique KDE et supprime l'ancien fichier `lock_proximity.sh` cassé.
+Le script **détecte automatiquement la distribution** (Debian/Ubuntu, Fedora, Arch/Manjaro, openSUSE) et installe les bons paquets système via `apt`/`dnf`/`pacman`/`zypper`. Il :
+
+- crée un environnement Python virtuel (`.venv` dans le dossier du dépôt) ;
+- installe les dépendances Python et le paquet local ;
+- installe la configuration initiale (`~/.config/security-linux/config.json`, 0600) ;
+- configure le démarrage automatique à la session (KDE/GNOME/XDG) ;
+- supprime l'ancien fichier `lock_proximity.sh` cassé.
+
+> Les paquets système (`python3-gi`, `python3-opencv`, `bluez`, `network-manager`, …) sont installés en option avec `sudo` ; s'ils manquent, l'application fonctionnera avec une fonctionnalité réduite (bluetooth/localisation indisponibles).
 
 ## Utilisation
 
@@ -48,15 +60,30 @@ security-linux
 # Lance le démon (démarre aussi via autostart KDE)
 security-linuxd
 
+# Donne l'état courant (captures en arrière-plan)
+security-linux status
+
+# Arme / désarme le système (le déarmement demande le code admin)
+security-linux arm
+security-linux disarm
+
 # Verrouille l'écran immédiatement
 security-linux lock-now
 
-# État courant (captures en arrière-plan)
-security-linux status
-
-# Définir le code admin
+# Définir / changer le code admin
 security-linux set-code
+
+# Liste les appareils Bluetooth appariés (pour les réglages)
+security-linux list-bt
 ```
+
+### Interface & démon
+
+- **Instance unique** : le démon et l'interface sont chacun protégés par un verrou (`flock`) — impossible de lancer deux démons en parallèle (double verrouillage évité).
+- **État figé détecté** : si le démon est à l'arrêt, l'interface affiche une bannière rouge **« DÉMON À L'ARRÊT »** avec un bouton **« Démarrer le démon »** (l'état `state.json` serait périmé).
+- **Interrupteur fiable** : la position de l'interrupteur reflète la configuration persistée (votre intention), pas un état figé — désarmer fonctionne même si le démon est arrêté.
+- **Webcam partagée** : le démon libère la webcam entre deux sondages — l'aperçu « Réglages → Webcam » fonctionne même démon actif.
+- **Code admin** : erreur affichée clairement en cas de code incorrect ou de trop de tentatives (anti-bruteforce : 3 échecs / 10 min).
 
 ## États de l'application
 
@@ -103,9 +130,41 @@ Le premier lancement vous demandera de choisir l'appareil à surveiller parmi vo
 
 Renseignez le ou les SSID de votre réseau domestique. Quand l'ordinateur est connecté à l'un de ces SSID → « à la maison » → comportement normal. Sinon → hors domicile → le système se réarme automatiquement.
 
+> Si la liste reste **vide**, la localisation est marquée « non configuré » : le système ne considère jamais l'ordinateur comme « hors domicile » et ne se réarme donc pas tout seul. Renseignez au moins un SSID pour activer le réarmement automatique.
+
 ### Mode « sécurisé hors-ligne »
 
 Activé par défaut. Si l'ordinateur perd toute connexion réseau (WiFi + Ethernet), le système se considère comme « hors domicile » et s'arme automatiquement. Désactiver cette option via l'application ou le fichier de config.
+
+## Fonctions avancées (v0.2)
+
+Configurables dans l'application → **Réglages → Fonctions avancées**.
+
+### Mode Silentium
+
+Suspend le **verrouillage automatique** pendant une plage horaire (défaut 23h → 7h), pour les nuits où vous travaillez. Le verrouillage manuel et la protection restent actifs : seul l'auto-verrouillage est mis en pause. L'état est visible dans l'écran principal (« Silentium : actif »).
+
+```json
+"silentium": { "enabled": false, "start_hour": 23, "end_hour": 7 }
+```
+
+### Mode braquage
+
+Joue une **alarme sonore** (sirène) quand le système verrouille automatiquement du fait d'une absence détectée — un moyen de dissuader une personne non autorisée. La durée est configurable (défaut 5 s).
+
+> L'alarme ne sonne **pas** en mode debug (verrouillage simulé).
+
+```json
+"braquage": { "enabled": false, "alarm_duration": 5 }
+```
+
+### Notifications bureau
+
+Une notification est envoyée (KDE/GNOME via `notify-send`) quand le système se **réarme automatiquement** (hors domicile ou hors ligne). Désactivable dans les réglages.
+
+```json
+"notifications": { "rearm": true }
+```
 
 ## Sécurité
 
@@ -114,7 +173,7 @@ Activé par défaut. Si l'ordinateur perd toute connexion réseau (WiFi + Ethern
 | Détection visage | OpenCV Haar cascade, 100 % local, aucune donnée envoyée |
 | Détection Bluetooth | BlueZ local (dbus/bluetoothctl), aucun réseau |
 | Localisation | nmcli (SSID) — 100 % local, pas de geolocalisation externe |
-| Code admin | PBKDF2-SHA256 (200 000 itérations), stocké dans `~/.config/security-linux/config.json` (0600) |
+| Code admin | PBKDF2-SHA256 (200 000 itérations), stocké dans `~/.config/security-linux/config.json` (0600) — anti-bruteforce : 3 échecs / 10 min |
 | Commandes | JSON atomiques dans `~/.local/share/security-linux/`, supprimés après lecture |
 | Configuration | Fichier config.json en 0600 |
 | Journal | `~/.local/share/security-linux/events.log` (0600), pas de données sensibles en clair |
@@ -131,7 +190,8 @@ Activé par défaut. Si l'ordinateur perd toute connexion réseau (WiFi + Ethern
 src/security_linux/
 ├── cli.py              # CLI (security-linux, security-linuxd)
 ├── daemon.py           # Démon de surveillance (boucle 1s)
-├── engine.py           # Moteur de décision (AND/OR, grâce, réarmement)
+├── engine.py           # Moteur de décision (AND/OR, grâce, réarmement, Silentium)
+├── alerts.py           # Alarme sonore (braquage) + notifications bureau
 ├── lock.py             # Verrouillage d'écran (loginctl / qdbus)
 ├── config.py           # Config JSON + hachage code admin
 ├── events.py           # Journal + état partagé (state.json / command.json)
@@ -144,7 +204,7 @@ src/security_linux/
 │   ├── bluetooth.py    # BlueZ (bluetoothctl)
 │   └── location.py     # nmcli (Wi-Fi) / GeoClue (GPS)
 └── gui/
-    └── app.py          # GTK3 (interrupteur, réglages, tray)
+    └── app.py          # GTK3 (interrupteur, réglages, capture viewer, tray)
 ```
 
 ## Technologies
@@ -164,7 +224,7 @@ L'application est conçue pour fonctionner sur n'importe quelle machine Linux, s
 - **Bluetooth** : l'utilisateur choisit son appareil parmi les appareils appariés lors du premier réglage (aucun appareil imposé).
 - **Localisation** : fonctionne avec NetworkManager (`nmcli`) ; repli possible via `iwgetid`.
 - **Verrouillage d'écran** : `loginctl` (standard), compatible KDE Plasma et GNOME ; repli `qdbus` (KDE) et `xdg-screensaver`.
-- **Dépendances système** (Debian/Ubuntu) : `python3-gi python3-gi-cairo gir1.2-gtk-3.0 python3-opencv bluetooth bluez network-manager` ; équivalents sur Fedora/Arch via votre gestionnaire de paquets.
+- **Dépendances système** : installées automatiquement par `./scripts/install.sh` selon la distribution — Debian/Ubuntu (`apt`), Fedora (`dnf`), Arch/Manjaro (`pacman`), openSUSE (`zypper`) ; liste exacte dans le script.
 - **Espaces de noms XDG** : configuration et données suivent les standards (`~/.config`, `~/.local/share`, `~/.cache`) avec des chemins en environnement respectés.
 
 ## Licence

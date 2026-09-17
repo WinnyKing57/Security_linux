@@ -90,26 +90,42 @@ class LocationMonitor(Monitor):
                 home_lat = float(cfg.get("home_lat", 0.0))
                 home_lon = float(cfg.get("home_lon", 0.0))
                 radius = float(cfg.get("radius_km", 1.0))
-                if not (home_lat == 0.0 and home_lon == 0.0):
-                    dist = _haversine_km(lat, lon, home_lat, home_lon)
-                    at_home = dist <= radius
-                    return self._finish(
-                        at_home,
-                        offline,
-                        f"GPS: dist {dist:.2f} km (rayon {radius} km)",
-                    )
-                return self._finish(False, offline, "GPS: coordonnées domicile non définies")
+                if home_lat == 0.0 and home_lon == 0.0:
+                    return self._unconfigured("GPS: coordonnées domicile non définies", offline)
+                dist = _haversine_km(lat, lon, home_lat, home_lon)
+                at_home = dist <= radius
+                return self._finish(
+                    at_home,
+                    offline,
+                    f"GPS: dist {dist:.2f} km (rayon {radius} km)",
+                )
 
         # repli wifi (défaut)
         ssid = self.current_wifi_ssid()
         if ssid is None:
             return self._finish(False, offline, "aucun réseau Wi-Fi actif")
+        if not home_ssids:
+            # Aucun SSID 'maison' défini : on ne peut pas juger — statut neutre.
+            # Sinon "hors domicile" forcerait un réarmement immédiat (piège).
+            return self._unconfigured(
+                f"Wi-Fi: {ssid} — SSID 'maison' non défini dans les réglages", offline
+            )
         at_home = ssid.strip().lower() in home_ssids
         detail = f"Wi-Fi: {ssid}" + (" (maison)" if at_home else " (hors domicile)")
-        if not home_ssids:
-            detail += " - liste 'maison' vide"
-            at_home = False
         return self._finish(at_home, offline, detail)
+
+    def _unconfigured(self, detail: str, offline: bool) -> MonitorResult:
+        """Localisation non configurée : neutre (ni maison, ni hors domicile).
+        at_home à None pour ne pas déclencher de réarmement forcé (le moteur
+        ignore aussi le statut hors-ligne quand la localisation est non configurée)."""
+        suffix = " ; hors ligne" if offline else ""
+        return MonitorResult(
+            self.name,
+            "unconfigured",
+            detail + suffix,
+            at_home=None,
+            offline=offline,
+        )
 
     def _finish(self, at_home: bool, offline: bool, detail: str) -> MonitorResult:
         status = "home" if at_home else "away"

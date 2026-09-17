@@ -1,6 +1,7 @@
 README.md
 pyproject.toml
 src/security_linux/__init__.py
+src/security_linux/alerts.py
 src/security_linux/cli.py
 src/security_linux/config.py
 src/security_linux/daemon.py

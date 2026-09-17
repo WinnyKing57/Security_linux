@@ -141,7 +141,7 @@ scripts/install.sh          # Remplacement complet (supprime l'ancien autostart)
 
 | Zone | Risque | Mitigation |
 |---|---|---|
-| Admin code | Brute force sur la GUI | Limité à 3 tentatives par 10 min dans les guidelines (pas implémenté en v1) |
+| Admin code | Brute force sur la GUI | Anti-bruteforce **implémenté** : 3 tentatives par 10 min (`config.py` `verify_admin_code`) |
 | Admin code | Contournement root | Documenté comme limitation v1 |
 | Camera | Fail open si webcam cassée | Ne verrouille PAS si la webcam est indisponible (fail-safe) |
 | Bluetooth | Scan tous les 10s | Acceptable, mais peut être alourdi en présence de dispositifs parasites |
@@ -221,6 +221,15 @@ installation ni à des données réelles, sur n'importe quelle machine ».
 6. **Correction instance unique (renforcée)** — **TERMINÉ** v0.2.0 : récupération des verrous orphelins (vérification PID vivant), `atexit` + signaux, plus de fallback `/tmp`, pas de troncature avant `flock`
 7. **Correction désarmement admin (renforcée)** — **TERMINÉ** v0.2.0 : `on_armed_toggle` renvoie `True` sur échec (l'interrupteur ne reste plus visuellement DÉSARMÉ), config rechargée du disque avant vérification, flux sans code simplifié, `disarm`/`arm` CLI persistent la config
 8. **Packaging (script d'installation multi-distro)** — **TERMINÉ** v0.2.0 : `scripts/install.sh` auto-détecte Debian/Ubuntu, Fedora, Arch/Manjaro et openSUSE (apt/dnf/pacman/zypper)
+
+### ✅ Tâches v0.2.1 terminées (correctifs d'utilisation) :
+1. **Interrupteur fiable (désarmement)** — l'interrupteur reflète la config persistée au lieu de l'état figé `state.json` → désarmer fonctionne même démon arrêté — **TERMINÉ** `_render_armed()` (app.py)
+2. **Démon à l'arrêt détecté** — bannière rouge **« DÉMON À L'ARRÊT »** + bouton « Démarrer le démon » ; fraîcheur de `state.json` (ts > 12 s) — **TERMINÉ** app.py `_poll()`/`_state_is_stale()`
+3. **Instance unique du démon** — verrou `flock` (+ récupération PID orphelins) empêchant deux démons en parallèle (d'où le double verrouillage d'écran observé) — **TERMINÉ** daemon.py
+4. **Webcam libérée entre sondages** — plus de conflit avec l'aperçu « Réglages → Webcam » (« droits insuffisants / périphérique occupé ») — **TERMINÉ** camera.py `tick()` (`_close_cap()` en `finally`)
+5. **Localisation non configurée = neutre** — SSID « maison » vide → statut « unconfigured » et AUCUN réarmement forcé (le désarmement reste effectif) — **TERMINÉ** location.py + engine.py `effective_armed()`
+6. **Feedback code admin** — message clair en cas de code incorrect ou trop de tentatives — **TERMINÉ** `_confirm_admin()` (app.py)
+7. **Journal enrichi** — démarrage (version, mode, webcam, BT, localisation), « réglages appliqués » avec valeurs, « moniteur X reconfiguré » au changement — **TERMINÉ** daemon.py
 
 ### ❌ Tâches restantes :
 1. **Traductions (i18n)** - système complet de localisation (fichiers .po/.mo, gettext) — **À DÉFINIR** (non prioritaire)

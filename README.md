@@ -1,6 +1,6 @@
 # Security-Linux
 
-Verrouillage automatique d'écran et sécurité de bureau — **100 % local**, aucune donnée envoyée sur Internet. *(v0.2.0)*
+Verrouillage automatique d'écran et sécurité de bureau — **100 % local**, aucune donnée envoyée sur Internet. *(v0.2.1)*
 
 ## Fonctionnalités
 
@@ -8,7 +8,7 @@ Verrouillage automatique d'écran et sécurité de bureau — **100 % local**, a
 |---|---|---|
 | **Webcam** | Détection de visage (OpenCV, Haar) locale. Aucun visage = absent. | Oui (si webcam disponible) |
 | **Bluetooth** | Mesure la présence d'un téléphone, tablette ou montre via BlueZ local. | Oui (RSSI/local) |
-| **Localisation** | Wi-Fi SSID « maison » ou GPS (optionnel). Hors domicile = réarmé. | 100 % local |
+| **Localisation** | Wi-Fi SSID « maison » ou GPS (optionnel). Hors domicile = réarmé. Tant que la liste « maison » est vide (non configurée), la localisation est **neutre** : aucun réarmement forcé. | 100 % local |
 | **Howdy** | Reconnaissance faciale PAM (dormant en v1, activable manuellement). | 100 % local |
 | **Code admin** | Désactivation de l'interrupteur = code requis (haché PBKDF2, jamais en clair). | Sécurisé UI |
 | **Mode Silentium** | Suspend l'auto-verrouillage pendant les heures nocturnes configurées. | Configurable |
@@ -20,7 +20,7 @@ Verrouillage automatique d'écran et sécurité de bureau — **100 % local**, a
 - Mode **AND** (défaut) : verrouille quand la webcam VOIT aucun visage **ET** l'appareil Bluetooth est injoignable, pendant un délai configurable (défaut 20 s).
 - Mode **OR** : dès qu'un seul capteur dit « absent ».
 - **Délai de grâce** (défaut 10 s) avant verrouillage pour éviter les faux positifs.
-- **Réarmement automatique** : hors domicile ou hors ligne (mode « sécurisé hors-ligne » activable) → le système se réarme tout seul, même si l'interrupteur était coupé.
+- **Réarmement automatique** : hors domicile ou hors ligne (mode « sécurisé hors-ligne » activable) → le système se réarme tout seul, même si l'interrupteur était coupé. Uniquement si la localisation est **configurée** (au moins un SSID « maison ») ; sinon le statut est « non configuré » et n'arme/désarme jamais de force.
 
 ## Installation
 
@@ -65,6 +65,14 @@ security-linux set-code
 # Liste les appareils Bluetooth appariés (pour les réglages)
 security-linux list-bt
 ```
+
+### Interface & démon
+
+- **Instance unique** : le démon et l'interface sont chacun protégés par un verrou (`flock`) — impossible de lancer deux démons en parallèle (double verrouillage évité).
+- **État figé détecté** : si le démon est à l'arrêt, l'interface affiche une bannière rouge **« DÉMON À L'ARRÊT »** avec un bouton **« Démarrer le démon »** (l'état `state.json` serait périmé).
+- **Interrupteur fiable** : la position de l'interrupteur reflète la configuration persistée (votre intention), pas un état figé — désarmer fonctionne même si le démon est arrêté.
+- **Webcam partagée** : le démon libère la webcam entre deux sondages — l'aperçu « Réglages → Webcam » fonctionne même démon actif.
+- **Code admin** : erreur affichée clairement en cas de code incorrect ou de trop de tentatives (anti-bruteforce : 3 échecs / 10 min).
 
 ## États de l'application
 
@@ -111,6 +119,8 @@ Le premier lancement vous demandera de choisir l'appareil à surveiller parmi vo
 
 Renseignez le ou les SSID de votre réseau domestique. Quand l'ordinateur est connecté à l'un de ces SSID → « à la maison » → comportement normal. Sinon → hors domicile → le système se réarme automatiquement.
 
+> Si la liste reste **vide**, la localisation est marquée « non configuré » : le système ne considère jamais l'ordinateur comme « hors domicile » et ne se réarme donc pas tout seul. Renseignez au moins un SSID pour activer le réarmement automatique.
+
 ### Mode « sécurisé hors-ligne »
 
 Activé par défaut. Si l'ordinateur perd toute connexion réseau (WiFi + Ethernet), le système se considère comme « hors domicile » et s'arme automatiquement. Désactiver cette option via l'application ou le fichier de config.
@@ -152,7 +162,7 @@ Une notification est envoyée (KDE/GNOME via `notify-send`) quand le système se
 | Détection visage | OpenCV Haar cascade, 100 % local, aucune donnée envoyée |
 | Détection Bluetooth | BlueZ local (dbus/bluetoothctl), aucun réseau |
 | Localisation | nmcli (SSID) — 100 % local, pas de geolocalisation externe |
-| Code admin | PBKDF2-SHA256 (200 000 itérations), stocké dans `~/.config/security-linux/config.json` (0600) |
+| Code admin | PBKDF2-SHA256 (200 000 itérations), stocké dans `~/.config/security-linux/config.json` (0600) — anti-bruteforce : 3 échecs / 10 min |
 | Commandes | JSON atomiques dans `~/.local/share/security-linux/`, supprimés après lecture |
 | Configuration | Fichier config.json en 0600 |
 | Journal | `~/.local/share/security-linux/events.log` (0600), pas de données sensibles en clair |

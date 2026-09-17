@@ -142,11 +142,16 @@ class CameraMonitor(Monitor):
             return MonitorResult(self.name, "unavailable", "webcam ou OpenCV indisponible")
         self._device = self.cfg.get("device", self._device)
         faces_seen = 0
-        for _ in range(max(1, self._confirm_frames)):
-            if self.face_detected():
-                faces_seen += 1
-            if faces_seen > 0:
-                break
+        try:
+            for _ in range(max(1, self._confirm_frames)):
+                if self.face_detected():
+                    faces_seen += 1
+                if faces_seen > 0:
+                    break
+        finally:
+            # Libère la webcam entre deux sondages : le démon ne doit pas
+            # monopoliser /dev/video* (l'aperçu des réglages en a besoin).
+            self._close_cap()
         present = faces_seen > 0
         self._start_absent_if(not present, _time.time())
         if present:

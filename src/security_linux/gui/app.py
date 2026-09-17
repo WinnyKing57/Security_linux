@@ -64,6 +64,8 @@ class SecurityLinuxApp:
         self.armed_switch: Gtk.Switch | None = None
         self.labels: dict[str, Gtk.Label] = {}
         self.tray: Gtk.StatusIcon | None = None
+        self.stale: bool = True
+        self.daemon_row: Gtk.Box | None = None
 
     # -------------------------------------------------------- construction
     def build_ui(self) -> Gtk.Window:
@@ -77,6 +79,17 @@ class SecurityLinuxApp:
         self.labels["mode_banner"] = Gtk.Label(label="…", xalign=0)
         self.labels["mode_banner"].set_visible(False)
         vbox.pack_start(self.labels["mode_banner"], False, True, 0)
+
+        # --- bannière démon à l'arrêt (capteurs figés)
+        self.daemon_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.labels["daemon_banner"] = Gtk.Label(label="", xalign=0)
+        self.labels["daemon_banner"].set_line_wrap(True)
+        b_daemon = Gtk.Button(label="Démarrer le démon")
+        b_daemon.connect("clicked", self._start_daemon)
+        self.daemon_row.pack_start(self.labels["daemon_banner"], True, True, 0)
+        self.daemon_row.pack_end(b_daemon, False, True, 0)
+        self.daemon_row.set_visible(False)
+        vbox.pack_start(self.daemon_row, False, True, 0)
 
         # --- bannière + interrupteur
         armed_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
@@ -199,13 +212,91 @@ class SecurityLinuxApp:
 
     # -------------------------------------------------------------- état
     def _poll(self) -> bool:
+        try:
+            self.cfg = config.load_config()
+        except Exception:  # noqa: BLE001
+            pass
         state = events.read_state()
+        self.stale = True
         if state:
             self.last_state = state
             self._render_state(state)
+            self.stale = self._state_is_stale(state)
+        else:
+            self.last_state = {}
+        self._render_daemon_banner()
         self._render_armed()
         GLib.timeout_add(_TICK_MS, self._poll)
         return False
+
+    @staticmethod
+    def _parse_ts(value) -> "object | None":
+        from datetime import datetime, timezone
+
+        if not value:
+            return None
+        try:
+            ts = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return ts
+
+    def _state_is_stale(self, state: dict, max_age_s: float = 12.0) -> bool:
+        from datetime import datetime, timezone
+
+        ts = self._parse_ts(state.get("ts"))
+        if ts is None:
+            return True
+        return (datetime.now(timezone.utc) - ts).total_seconds() > max_age_s
+
+    def _render_daemon_banner(self) -> None:
+        if self.daemon_row is None:
+            return
+        if runtime.is_debug():
+            self.daemon_row.set_visible(False)
+            return
+        if self.stale:
+            self.labels["daemon_banner"].set_markup(
+                '<span color="red" weight="bold">DÉMON À L\'ARRÊT — état figé. '
+                "Les capteurs et le relais ne sont pas actualisés.</span>"
+            )
+            self.daemon_row.set_visible(True)
+        else:
+            self.daemon_row.set_visible(False)
+
+    def _daemon_running(self) -> bool:
+        try:
+            out = subprocess.run(
+                ["pgrep", "-f", "security-linuxd|security_linux\\.daemon"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            return out.returncode == 0 and bool(out.stdout.strip())
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _start_daemon(self, *_args) -> None:
+        if self._daemon_running() or not self.stale:
+            self._render_daemon_banner()
+            return
+        if sys.executable:
+            cmd = [sys.executable, "-m", "security_linux.daemon"]
+        else:
+            cmd = ["security-linuxd"]
+        try:
+            subprocess.Popen(
+                cmd,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            self._msg("Démon de sécurité démarré en arrière-plan.", error=False)
+        except Exception as exc:  # noqa: BLE001
+            self._msg(f"Impossible de démarrer le démon : {exc}", error=True)
 
     def _render_state(self, state: dict) -> None:
         def setl(key, text, color=None):
@@ -256,17 +347,25 @@ class SecurityLinuxApp:
 
     def _render_armed(self) -> None:
         armed = self.last_state.get("armed_state", {})
-        eff = armed.get("armed", self.cfg["general"]["armed"])
-        manual = armed.get("manual", self.cfg["general"]["armed"])
-        forced = armed.get("forced", False)
+        # L'interrupteur reflète l'INTENTION persistée (config), pas l'état
+        # publié par le démon : si le démon est à l'arrêt, state.json est figé
+        # et ramènerait l'interrupteur en position OFF à chaque tick.
+        manual = bool(self.cfg["general"]["armed"])
+        if not self.stale:
+            eff = bool(armed.get("armed", manual))
+            forced = bool(armed.get("forced", False))
+        else:
+            eff = manual
+            forced = False
         if self.armed_switch.get_active() != manual:
             self.armed_switch.handler_block_by_func(self.on_armed_toggle)
             self.armed_switch.set_active(manual)
             self.armed_switch.handler_unblock_by_func(self.on_armed_toggle)
         status_lbl = self.labels.get("arm_status")
-        if eff:
-            why = " (réarmé : hors domicile / hors-ligne)" if forced and not manual else ""
-            txt = f"Protection ACTIVE{why}"
+        if eff or manual:
+            why = " (réarmé : hors domicile / hors-ligne)" if (forced and not manual) else ""
+            fixed = " (état figé)" if self.stale else ""
+            txt = f"Protection ACTIVE{fixed}{why}"
             color = "green"
         else:
             txt = "Protection désactivée (code admin)"
@@ -308,7 +407,13 @@ class SecurityLinuxApp:
         dlg.destroy()
         if resp != Gtk.ResponseType.OK:
             return False
-        return config.verify_admin_code(self.cfg, code)
+        if config.verify_admin_code(self.cfg, code):
+            return True
+        self._msg(
+            "Code administrateur incorrect (ou trop de tentatives — patientez 10 min).",
+            error=True,
+        )
+        return False
 
     def _maybe_setup_admin_code(self):
         if not config.has_admin_code(self.cfg):

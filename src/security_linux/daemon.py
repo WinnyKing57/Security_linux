@@ -5,11 +5,14 @@ Lancement : python -m security_linux.daemon [--one-shot]
 from __future__ import annotations
 
 import argparse
+import atexit
+import fcntl
 import os
 import signal
 import sys
 import threading
 import time
+from pathlib import Path
 
 import security_linux.alerts as alerts
 import security_linux.config as config
@@ -22,8 +25,78 @@ from security_linux.monitors import MonitorResult
 from security_linux.monitors.bluetooth import BluetoothMonitor
 from security_linux.monitors.camera import CameraMonitor
 from security_linux.monitors.location import LocationMonitor
+from security_linux.version import __version__
 
 _WATCH = 1.0
+_LOCK_FILE = None
+
+
+def _daemon_lock_path() -> Path:
+    """Verrou d'instance unique : XDG_RUNTIME_DIR sinon répertoire de config."""
+    if runtime.is_debug():
+        return runtime.debug_root() / "daemon.lock"
+    base = Path(os.environ.get("XDG_RUNTIME_DIR") or config.config_dir())
+    return base / "security-linuxd.lock"
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def _acquire_daemon_lock() -> bool:
+    """Instance unique du démon (flock). Retourne False si déjà en cours."""
+    global _LOCK_FILE
+    path = _daemon_lock_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Instance précédente morte (crash) : son flock est libéré mais le
+        # fichier reste. On supprime l'orphelin avant de verrouiller.
+        try:
+            stale_pid = int(path.read_text("utf-8").strip().splitlines()[0])
+        except (OSError, ValueError, IndexError):
+            stale_pid = 0
+        if stale_pid and not _pid_alive(stale_pid):
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        # "a+" : ne tronque pas un fichier verrouillé par une autre instance.
+        _LOCK_FILE = open(path, "a+")
+        fcntl.flock(_LOCK_FILE.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _LOCK_FILE.seek(0)
+        _LOCK_FILE.truncate()
+        _LOCK_FILE.write(f"{os.getpid()}\n")
+        _LOCK_FILE.flush()
+        return True
+    except (IOError, OSError):
+        if _LOCK_FILE:
+            try:
+                _LOCK_FILE.close()
+            except OSError:
+                pass
+            _LOCK_FILE = None
+        return False
+
+
+def _release_daemon_lock() -> None:
+    global _LOCK_FILE
+    if _LOCK_FILE:
+        try:
+            fcntl.flock(_LOCK_FILE.fileno(), fcntl.LOCK_UN)
+            _LOCK_FILE.close()
+        except (IOError, OSError):
+            pass
+        try:
+            _daemon_lock_path().unlink(missing_ok=True)
+        except OSError:
+            pass
+        _LOCK_FILE = None
 
 
 def machine_state(armed: dict, mode: str) -> str:
@@ -55,6 +128,8 @@ class Daemon:
         }
         # État précédent d'armement forcé (détection des transitions de réarmement)
         self._prev_forced: bool | None = None
+        # Config précédente des moniteurs (journal des changements de réglages)
+        self._prev_mon_cfg: dict | None = None
 
     def _is_due(self, name: str, mon) -> bool:
         now = time.time()
@@ -69,6 +144,31 @@ class Daemon:
         self.camera.cfg = self.cfg["camera"]
         self.bluetooth.cfg = self.cfg["bluetooth"]
         self.location.cfg = self.cfg["location"]
+        keys = {
+            "camera": (self.cfg["camera"].get("enabled"), self.cfg["camera"].get("device")),
+            "bluetooth": (
+                self.cfg["bluetooth"].get("enabled"),
+                self.cfg["bluetooth"].get("device_addr"),
+                self.cfg["bluetooth"].get("min_rssi"),
+            ),
+            "location": (
+                self.cfg["location"].get("method"),
+                tuple(sorted(self.cfg["location"].get("home_ssids", []))),
+                self.cfg["location"].get("secure_when_offline"),
+            ),
+        }
+        labels = {
+            "camera": ("actif", "périphérique"),
+            "bluetooth": ("actif", "appareil", "seuil RSSI"),
+            "location": ("méthode", "SSID maison", "hors-ligne sécurisé"),
+        }
+        if self._prev_mon_cfg is not None:
+            for name, now in keys.items():
+                prev = self._prev_mon_cfg[name]
+                if now != prev:
+                    changed = [lbl for lbl, a, b in zip(labels[name], now, prev) if a != b]
+                    events.log_event("config", f"moniteur {name} reconfiguré : {', '.join(changed)}")
+        self._prev_mon_cfg = keys
 
     def _consume_commands(self) -> None:
         cmd = events.consume_command()
@@ -90,10 +190,26 @@ class Daemon:
                     changed = True
             if changed:
                 config.save_config(self.cfg)
-                events.log_event("config", f"{len(cmd['values'])} réglage(s) appliqué(s)")
+                details = ", ".join(f"{k}={v}" for k, v in cmd["values"].items())
+                events.log_event("config", f"réglages appliqués : {details}")
 
     def run(self) -> None:
-        events.log_event("daemon", "démarrage du démon de sécurité")
+        if not _acquire_daemon_lock():
+            events.log_event("daemon", "démarrage refusé : un démon de sécurité tourne déjà")
+            print("security-linuxd : un démon tourne déjà (voir le journal).", file=sys.stderr)
+            sys.exit(1)
+        atexit.register(_release_daemon_lock)
+        cam = self.cfg["camera"]
+        bt = self.cfg["bluetooth"]
+        loc = self.cfg["location"]
+        cam_state = "activée" if cam.get("enabled") else "coupée"
+        bt_state = bt.get("device_addr") or "aucun appareil"
+        events.log_event(
+            "daemon",
+            f"démarrage du démon de sécurité — v{__version__} (mode {runtime.mode()}), "
+            f"décision {self.cfg['general'].get('decision_mode')}, webcam {cam_state} ({cam.get('device')}), "
+            f"bluetooth {bt_state}, localisation {loc.get('method')}",
+        )
         cached: dict[str, MonitorResult] = {
             "camera": MonitorResult("camera", "pending"),
             "bluetooth": MonitorResult("bluetooth", "pending"),
@@ -110,8 +226,10 @@ class Daemon:
         while True:
             try:
                 self.cfg = config.load_config()
-                self._refresh_monitor_configs()
                 self._consume_commands()
+                # après consommation : les réglages 'set_many' sont repris par
+                # les moniteurs dès le cycle courant (immédiateté des changements)
+                self._refresh_monitor_configs()
                 for name, mon in (
                     ("camera", self.camera),
                     ("bluetooth", self.bluetooth),
