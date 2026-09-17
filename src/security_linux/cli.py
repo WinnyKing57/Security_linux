@@ -43,9 +43,22 @@ def cmd_status(_args) -> int:
     return 0
 
 
+def _persist_armed(value: bool) -> int:
+    """Persiste l'état armé dans la config ET l'envoie au démon.
+
+    Le double-écriture garantit que la commande survit même si le démon
+    ne tourne pas (le fichier de commande expire après 30 s).
+    """
+    cfg, _path = _load_or_default()
+    cfg["general"]["armed"] = bool(value)
+    config.save_config(cfg)
+    events.write_command({"type": "arm", "value": bool(value)})
+    return 0
+
+
 def cmd_arm(_args) -> int:
-    events.write_command({"type": "arm", "value": True})
-    print("Commande ARMÉ envoyée au démon.")
+    _persist_armed(True)
+    print("Système ARMÉ.")
     return 0
 
 
@@ -58,8 +71,8 @@ def cmd_disarm(_args) -> int:
     if not config.verify_admin_code(_cfg, code):
         print("Code invalide.")
         return 1
-    events.write_command({"type": "arm", "value": False})
-    print("Commande DÉSARMÉ envoyée au démon.")
+    _persist_armed(False)
+    print("Système DÉSARMÉ.")
     return 0
 
 

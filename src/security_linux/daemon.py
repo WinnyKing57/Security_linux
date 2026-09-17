@@ -10,6 +10,7 @@ import signal
 import sys
 import time
 
+import security_linux.alerts as alerts
 import security_linux.config as config
 import security_linux.events as events
 import security_linux.howdy_ctrl as howdy_ctrl
@@ -51,6 +52,8 @@ class Daemon:
             "bluetooth": 0.0,
             "location": 0.0,
         }
+        # État précédent d'armement forcé (détection des transitions de réarmement)
+        self._prev_forced: bool | None = None
 
     def _is_due(self, name: str, mon) -> bool:
         now = time.time()
@@ -143,6 +146,9 @@ class Daemon:
                                 events.log_event("capture", f"image locale conservée: {snap}")
                         except Exception as exc:  # noqa: BLE001
                             events.log_event("error", f"capture: {exc}")
+                if decision.get("action") in ("lock", "relock") and not runtime.is_debug():
+                    self._trigger_braquage()
+                self._maybe_notify_rearm(decision)
                 self._publish(cached, decision)
                 if self.one_shot:
                     runtime.debug_msg(f"one-shot terminé : {decision.get('armed', {})}")
@@ -150,6 +156,43 @@ class Daemon:
             except Exception as exc:  # noqa: BLE001
                 events.log_event("error", f"boucle principale: {exc}")
             time.sleep(_WATCH)
+
+    def _trigger_braquage(self) -> None:
+        """Mode braquage : alarme sonore sur verrouillage automatique."""
+        brq = self.cfg.get("braquage", {})
+        if not brq.get("enabled", False):
+            return
+        try:
+            duration = int(brq.get("alarm_duration", 5))
+            alerts.play_alarm(duration)
+            events.log_event("alarm", f"alarme sonore déclenchée ({duration}s, mode braquage)")
+        except Exception as exc:  # noqa: BLE001
+            events.log_event("error", f"alarme: {exc}")
+
+    def _maybe_notify_rearm(self, decision: dict) -> None:
+        """Notification bureau quand le système se réarme automatiquement."""
+        if runtime.is_debug():
+            return
+        notif = self.cfg.get("notifications", {})
+        if not notif.get("rearm", True):
+            self._prev_forced = bool(decision.get("armed", {}).get("forced"))
+            return
+        armed = decision.get("armed", {})
+        forced = bool(armed.get("forced"))
+        if self._prev_forced is None:
+            # Premier cycle : on mémorise l'état sans notifier au démarrage du démon.
+            self._prev_forced = forced
+            return
+        if forced and not self._prev_forced:
+            away = bool(armed.get("away"))
+            offline = bool(armed.get("offline_secure"))
+            reason = "hors_ligne" if offline else ("hors_domicile" if away else "manuel")
+            try:
+                alerts.send_rearm_notification(reason)
+                events.log_event("notification", f"réarmement automatique notifié ({reason})")
+            except Exception as exc:  # noqa: BLE001
+                events.log_event("error", f"notification réarmement: {exc}")
+        self._prev_forced = forced
 
     def _apply_simulations(self, states: dict[str, MonitorResult]) -> dict[str, MonitorResult]:
         """En debug uniquement : injecte des états de capteurs pour les tests."""
@@ -186,6 +229,7 @@ class Daemon:
             "conditions": decision.get("conditions", {}),
             "action": decision.get("action"),
             "time_to_lock": decision.get("time_to_lock", 0.0),
+            "silentium_active": decision.get("silentium_active", False),
             "monitors": {name: mon.to_dict() for name, mon in states.items()},
             "howdy": {
                 "installed": howdy_ctrl.is_installed(),

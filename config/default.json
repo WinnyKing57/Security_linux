@@ -34,6 +34,19 @@
   },
   "admin_code": {
     "salt": "",
-    "hash": ""
+    "hash": "",
+    "failed_attempts": []
+  },
+  "silentium": {
+    "enabled": false,
+    "start_hour": 23,
+    "end_hour": 7
+  },
+  "braquage": {
+    "enabled": false,
+    "alarm_duration": 5
+  },
+  "notifications": {
+    "rearm": true
   }
 }

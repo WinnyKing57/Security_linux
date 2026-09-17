@@ -10,8 +10,10 @@ Fonctions :
 """
 from __future__ import annotations
 
+import atexit
 import fcntl
 import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -99,6 +101,7 @@ class SecurityLinuxApp:
             ("Bluetooth (appareil)", "bluetooth"),
             ("Localisation", "location"),
             ("Howdy (visage PAM)", "howdy"),
+            ("Silentium", "silentium"),
             ("Dernier événement", "last_event"),
         ]
         for i, (title, key) in enumerate(rows):
@@ -146,8 +149,15 @@ class SecurityLinuxApp:
         self._poll()
         self._maybe_setup_admin_code()
         self._build_tray()
-        Gtk.main()
-        _release_instance_lock()
+        signal.signal(signal.SIGTERM, self._handle_signal)
+        signal.signal(signal.SIGINT, self._handle_signal)
+        try:
+            Gtk.main()
+        finally:
+            _release_instance_lock()
+
+    def _handle_signal(self, *_args):
+        GLib.idle_add(self.quit_app)
 
     def on_delete_event(self, *_args):
         # se ferme en barre système et non quit
@@ -232,6 +242,9 @@ class SecurityLinuxApp:
         else:
             setl("last_event", "—")
 
+        silentium = state.get("silentium_active", False)
+        setl("silentium", "actif — auto-lock suspendu" if silentium else "inactif", "orange" if silentium else "black")
+
         banner = self.labels.get("mode_banner")
         is_debug = state.get("mode") == "debug" or runtime.is_debug()
         if banner:
@@ -264,19 +277,30 @@ class SecurityLinuxApp:
     def on_armed_toggle(self, switch, state):
         new_state = bool(state)
         if new_state is False:
+            # Recharge depuis le disque AVANT toute vérification : on ne fige pas
+            # un état périmé (réglages, compteur anti-bruteforce) au moment où on
+            # va y écrire les tentatives et l'armement.
+            self.cfg = config.load_config()
             if not self._confirm_admin("Désactiver la protection", "Saisissez le code administrateur pour désactiver le système."):
+                # True : empêche le handler par défaut de GTK d'appliquer l'état
+                # rejeté, sinon l'interrupteur reste visuellement DÉSARMÉ alors
+                # que la protection n'a jamais été désactivée.
                 switch.handler_block_by_func(self.on_armed_toggle)
                 switch.set_active(True)
                 switch.handler_unblock_by_func(self.on_armed_toggle)
-                return
-        events.write_command({"type": "arm", "value": new_state})
+                return True
         self.cfg["general"]["armed"] = new_state
         config.save_config(self.cfg)
+        events.write_command({"type": "arm", "value": new_state})
         return False
 
     def _confirm_admin(self, title, message) -> bool:
         if not config.has_admin_code(self.cfg):
-            self._setup_admin_code_dialog(title, message)
+            # Aucun code enregistré : on en crée un. S'il est posé, l'action est
+            # considérée autorisée — pas de troisième boîte de dialogue superflue.
+            if self._setup_admin_code_dialog("Créer un code administrateur", "Aucun code n'est défini. Créez-en un pour autoriser cette action."):
+                return True
+            return False
         dlg = AdminCodeDialog(self.window, title, message)
         dlg.show_all()
         resp = dlg.run()
@@ -290,14 +314,14 @@ class SecurityLinuxApp:
         if not config.has_admin_code(self.cfg):
             self._setup_admin_code_dialog("Premier lancement", "Créez votre code administrateur (nécessaire pour désactiver la protection).")
 
-    def _setup_admin_code_dialog(self, title, message):
+    def _setup_admin_code_dialog(self, title, message) -> bool:
         dlg = AdminCodeDialog(self.window, title, message)
         dlg.show_all()
         resp = dlg.run()
         first = dlg.get_code()
         dlg.destroy()
         if resp != Gtk.ResponseType.OK or not first:
-            return
+            return False
         dlg2 = AdminCodeDialog(self.window, "Confirmation", "Confirmez le code administrateur")
         dlg2.show_all()
         resp2 = dlg2.run()
@@ -307,6 +331,9 @@ class SecurityLinuxApp:
             config.set_admin_code(self.cfg, first)
             config.save_config(self.cfg)
             events.log_event("admin", "code administrateur défini")
+            return True
+        events.log_event("admin", "code administrateur non défini (annulé ou non confirmé)")
+        return False
 
     def lock_now(self):
         from security_linux.lock import lock_screen
@@ -884,7 +911,8 @@ class SecuritySettingsDialog:
         notif_box.set_margin_start(8)
         notif_box.set_margin_end(8)
         
-        self.notif_rearm = Gtk.Switch(active=True)  # Activé par défaut
+        n = self.cfg.get("notifications", {})
+        self.notif_rearm = Gtk.Switch(active=bool(n.get("rearm", True)))
         
         nrow1 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         nrow1.pack_start(Gtk.Label(label="Notifier lors du réarmement auto", xalign=0), True, True, 0)
@@ -973,6 +1001,9 @@ class SecuritySettingsDialog:
         bq["enabled"] = self.braquage_enabled.get_active()
         bq["alarm_duration"] = int(self.braquage_duration.get_value())
 
+        n = self.cfg.setdefault("notifications", {})
+        n["rearm"] = self.notif_rearm.get_active()
+
         config.save_config(self.cfg)
         # applique à chaud les réglages au démon
         values = {
@@ -989,11 +1020,26 @@ class SecuritySettingsDialog:
 
 
 def _get_lock_path() -> Path:
-    """Retourne le chemin du fichier lock pour l'instance unique."""
+    """Retourne le chemin du fichier lock pour l'instance unique.
+
+    On privilégie XDG_RUNTIME_DIR (per-user, tmpfs) et on tombe sur le
+    répertoire de config de l'utilisateur si celui-ci n'est pas défini —
+    jamais sur /tmp (dossier partagé, monde inscriptible).
+    """
     if runtime.is_debug():
         return runtime.debug_root() / "gui.lock"
-    base = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp"))
-    return base / f"security-linux-gui.lock"
+    base = Path(os.environ.get("XDG_RUNTIME_DIR") or config.config_dir())
+    return base / "security-linux-gui.lock"
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
 
 
 def _acquire_instance_lock() -> bool:
@@ -1002,14 +1048,33 @@ def _acquire_instance_lock() -> bool:
     lock_path = _get_lock_path()
     try:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
-        _LOCK_FILE = open(lock_path, "w")
+        # Une instance précédente peut être morte (crash) : son flock est libéré
+        # mais le fichier reste. On supprime le fichier orphelin avant de verrouiller.
+        try:
+            stale_pid = int(lock_path.read_text("utf-8").strip().splitlines()[0])
+        except (OSError, ValueError, IndexError):
+            stale_pid = 0
+        if stale_pid and not _pid_alive(stale_pid):
+            try:
+                lock_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        # Ouverture en "a+" : ne tronque PAS un fichier potentiellement
+        # verrouillé par une autre instance. On ne tronque qu'après verrouillage.
+        _LOCK_FILE = open(lock_path, "a+")
         fcntl.flock(_LOCK_FILE.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        _LOCK_FILE.write(str(os.getpid()))
+        _LOCK_FILE.seek(0)
+        _LOCK_FILE.truncate()
+        _LOCK_FILE.write(f"{os.getpid()}\n")
         _LOCK_FILE.flush()
+        atexit.register(_release_instance_lock)
         return True
     except (IOError, OSError):
         if _LOCK_FILE:
-            _LOCK_FILE.close()
+            try:
+                _LOCK_FILE.close()
+            except OSError:
+                pass
             _LOCK_FILE = None
         return False
 

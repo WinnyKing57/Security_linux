@@ -22,11 +22,20 @@ Verrouillage automatique d'écran et sécurité de bureau — **100 % local**, a
 ## Installation
 
 ```bash
-cd security_linux
+git clone https://github.com/WinnyKing57/Security_linux.git
+cd Security_linux
 ./scripts/install.sh
 ```
 
-Cela crée un environnement Python virtuel (`~/.venv`), installe les dépendances, configure le démarrage automatique KDE et supprime l'ancien fichier `lock_proximity.sh` cassé.
+Le script **détecte automatiquement la distribution** (Debian/Ubuntu, Fedora, Arch/Manjaro, openSUSE) et installe les bons paquets système via `apt`/`dnf`/`pacman`/`zypper`. Il :
+
+- crée un environnement Python virtuel (`.venv` dans le dossier du dépôt) ;
+- installe les dépendances Python et le paquet local ;
+- installe la configuration initiale (`~/.config/security-linux/config.json`, 0600) ;
+- configure le démarrage automatique à la session (KDE/GNOME/XDG) ;
+- supprime l'ancien fichier `lock_proximity.sh` cassé.
+
+> Les paquets système (`python3-gi`, `python3-opencv`, `bluez`, `network-manager`, …) sont installés en option avec `sudo` ; s'ils manquent, l'application fonctionnera avec une fonctionnalité réduite (bluetooth/localisation indisponibles).
 
 ## Utilisation
 
@@ -153,7 +162,7 @@ L'application est conçue pour fonctionner sur n'importe quelle machine Linux, s
 - **Bluetooth** : l'utilisateur choisit son appareil parmi les appareils appariés lors du premier réglage (aucun appareil imposé).
 - **Localisation** : fonctionne avec NetworkManager (`nmcli`) ; repli possible via `iwgetid`.
 - **Verrouillage d'écran** : `loginctl` (standard), compatible KDE Plasma et GNOME ; repli `qdbus` (KDE) et `xdg-screensaver`.
-- **Dépendances système** (Debian/Ubuntu) : `python3-gi python3-gi-cairo gir1.2-gtk-3.0 python3-opencv bluetooth bluez network-manager` ; équivalents sur Fedora/Arch via votre gestionnaire de paquets.
+- **Dépendances système** : installées automatiquement par `./scripts/install.sh` selon la distribution — Debian/Ubuntu (`apt`), Fedora (`dnf`), Arch/Manjaro (`pacman`), openSUSE (`zypper`) ; liste exacte dans le script.
 - **Espaces de noms XDG** : configuration et données suivent les standards (`~/.config`, `~/.local/share`, `~/.cache`) avec des chemins en environnement respectés.
 
 ## Licence

@@ -149,6 +149,103 @@ def test_engine_not_armed_no_lock():
     assert locks["n"] == 0
 
 
+# ----------------------------------------------------------- Silentium
+def _absent_states():
+    return {
+        "camera": FakeMon("absent", 100),
+        "bluetooth": FakeMon("absent", 100),
+        "location": MonitorResult("location", "home", at_home=True, offline=False),
+    }
+
+
+def test_config_defaults_include_features():
+    assert "silentium" in DEFAULT_CONFIG
+    assert "braquage" in DEFAULT_CONFIG
+    assert "notifications" in DEFAULT_CONFIG
+    assert DEFAULT_CONFIG["notifications"]["rearm"] is True
+    assert DEFAULT_CONFIG["braquage"]["alarm_duration"] == 5
+
+
+def test_is_silentium_active_disabled():
+    import security_linux.config as cfgmod
+
+    cfg = copy.deepcopy(DEFAULT_CONFIG)
+    assert cfgmod.is_silentium_active(cfg) is False
+    cfg["silentium"]["enabled"] = True
+    cfg["silentium"]["start_hour"] = 23
+    cfg["silentium"]["end_hour"] = 7
+    # plage désactivée vs horaire non testé ici (dépend de l'heure courante)
+
+
+def _patch_hour(monkeypatch, hour_value: int):
+    import datetime as _dt
+
+    class _FakeClock:
+        hour = hour_value
+
+        @classmethod
+        def now(cls):
+            return cls()
+
+    monkeypatch.setattr(_dt, "datetime", _FakeClock)
+
+
+def test_is_silentium_active_night_range(monkeypatch):
+    import security_linux.config as cfgmod
+
+    cfg = copy.deepcopy(DEFAULT_CONFIG)
+    cfg["silentium"]["enabled"] = True
+    cfg["silentium"]["start_hour"] = 23
+    cfg["silentium"]["end_hour"] = 7
+    _patch_hour(monkeypatch, 1)   # 1h du matin : dans la plage
+    assert cfgmod.is_silentium_active(cfg) is True
+    _patch_hour(monkeypatch, 16)  # 16h : en dehors
+    assert cfgmod.is_silentium_active(cfg) is False
+
+
+def test_is_silentium_active_day_range(monkeypatch):
+    import security_linux.config as cfgmod
+
+    cfg = copy.deepcopy(DEFAULT_CONFIG)
+    cfg["silentium"]["enabled"] = True
+    cfg["silentium"]["start_hour"] = 14
+    cfg["silentium"]["end_hour"] = 16
+    _patch_hour(monkeypatch, 15)
+    assert cfgmod.is_silentium_active(cfg) is True
+    _patch_hour(monkeypatch, 10)
+    assert cfgmod.is_silentium_active(cfg) is False
+
+
+def test_engine_silentium_suppresses_lock(monkeypatch):
+    import security_linux.engine as engmod
+
+    cfg = copy.deepcopy(DEFAULT_CONFIG)
+    cfg["general"]["decision_mode"] = "AND"
+    cfg["general"]["lock_grace_seconds"] = 0
+    cfg["general"]["min_absent_seconds"] = 20
+    engine, locks = _make_engine(cfg)
+    monkeypatch.setattr(engmod.config, "is_silentium_active", lambda _cfg: True)
+    decision = engine.tick(_absent_states(), manual_armed=True)
+    assert decision["action"] is None
+    assert decision["silentium_active"] is True
+    assert locks["n"] == 0
+
+
+def test_engine_silentium_inactive_locks(monkeypatch):
+    import security_linux.engine as engmod
+
+    cfg = copy.deepcopy(DEFAULT_CONFIG)
+    cfg["general"]["decision_mode"] = "AND"
+    cfg["general"]["lock_grace_seconds"] = 0
+    cfg["general"]["min_absent_seconds"] = 20
+    engine, locks = _make_engine(cfg)
+    monkeypatch.setattr(engmod.config, "is_silentium_active", lambda _cfg: False)
+    decision = engine.tick(_absent_states(), manual_armed=True)
+    assert decision["action"] == "lock"
+    assert decision["silentium_active"] is False
+    assert locks["n"] == 1
+
+
 def test_engine_grace_cancels():
     cfg = copy.deepcopy(DEFAULT_CONFIG)
     cfg["general"]["decision_mode"] = "AND"

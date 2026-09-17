@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import time
 
+import security_linux.config as config
 import security_linux.events as events
 from security_linux.monitors import MonitorResult
 
@@ -80,12 +81,21 @@ class Engine:
         loc = states.get("location")
         armed_state = effective_armed(manual_armed, loc, secure_offline)
         cond = self._conditions_met(states)
+        silentium = config.is_silentium_active(self.cfg)
         now = time.time()
 
-        decision = {"armed": armed_state, "conditions": cond, "action": None}
+        decision = {"armed": armed_state, "conditions": cond, "action": None,
+                    "silentium_active": silentium}
 
         if not armed_state["armed"]:
             self._pending_since = None
+            return decision
+
+        # Mode Silentium : le verrouillage automatique est suspendu pendant
+        # les heures nocturnes configurées (le verrouillage manuel reste possible).
+        if silentium:
+            self._pending_since = None
+            decision["time_to_lock"] = 0.0
             return decision
 
         if cond["met"]:

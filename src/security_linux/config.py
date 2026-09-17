@@ -60,6 +60,9 @@ DEFAULT_CONFIG = {
         "enabled": False,
         "alarm_duration": 5,
     },
+    "notifications": {
+        "rearm": True,
+    },
 }
 
 CONFIG_DIR_ENV = "SECURITY_LINUX_CONFIG_DIR"
@@ -127,31 +130,31 @@ def set_admin_code(cfg: dict, code: str) -> None:
 
 def verify_admin_code(cfg: dict, code: str) -> bool:
     """Vérifie le code admin avec protection anti-bruteforce.
-    
-    Limite: 3 tentatives maximum par fenêtre de 10 minutes (600s).
+
+    Limite : 3 tentatives maximum par fenêtre de 10 minutes (600s).
     Retourne False si la limite est atteinte.
     """
     if not has_admin_code(cfg):
         return False
-    
+
     now = time.time()
     window_seconds = 600  # 10 minutes
     max_attempts = 3
-    
+
     failed = cfg["admin_code"].get("failed_attempts", [])
     recent = [t for t in failed if now - t < window_seconds]
-    
+
     if len(recent) >= max_attempts:
         oldest = min(recent) if recent else 0
         wait = int(window_seconds - (now - oldest))
         events.log_event("security", f"trop de tentatives échouées, attendez {wait}s")
         return False
-    
+
     if hashing.verify_code(code, cfg["admin_code"]["salt"], cfg["admin_code"]["hash"]):
         cfg["admin_code"]["failed_attempts"] = recent
         save_config(cfg)
         return True
-    
+
     recent.append(now)
     cfg["admin_code"]["failed_attempts"] = recent
     save_config(cfg)
