@@ -1,6 +1,6 @@
 # Security-Linux
 
-Verrouillage automatique d'écran et sécurité de bureau — **100 % local**, aucune donnée envoyée sur Internet. *(v1.0.0-beta)*
+Verrouillage automatique d'écran et sécurité de bureau — **100 % local**, aucune donnée envoyée sur Internet. *(v1.1.0-beta)*
 
 ## Fonctionnalités
 
@@ -12,8 +12,10 @@ Verrouillage automatique d'écran et sécurité de bureau — **100 % local**, a
 | **Howdy** | Reconnaissance faciale PAM (dormant en v1, activable manuellement). | 100 % local |
 | **Code admin** | Désactivation de l'interrupteur = code requis (haché PBKDF2, jamais en clair). | Sécurisé UI |
 | **Mode Silentium** | Suspend l'auto-verrouillage pendant les heures nocturnes configurées. | Configurable |
-| **Mode braquage** | Alarme sonore en cas de verrouillage automatique (tentative d'intrusion). | Configurable |
+| **Mode braquage** | Alarme sonore en cas de verrouillage automatique (tentative d'intrusion), ou si un capteur armé disparaît brusquement (`on_tamper`). | Configurable |
 | **Notifications** | Alerte bureau quand le système se réarme automatiquement (hors domicile/ligne). | Configurable |
+| **Verrouillage par inactivité** | Repli indépendant des capteurs (KDE `GetSessionIdleTime` / GNOME Mutter), seuil en minutes, 0 = désactivé. | Configurable |
+| **Journal de sécurité** | Rotation auto par taille + chaîne d'intégrité SHA-256 (`verify_event_log()` détecte toute falsification). | Local |
 
 ### Règle de verrouillage
 
@@ -35,10 +37,23 @@ Le script **détecte automatiquement la distribution** (Debian/Ubuntu, Fedora, A
 - crée un environnement Python virtuel (`.venv` dans le dossier du dépôt) ;
 - installe les dépendances Python et le paquet local ;
 - installe la configuration initiale (`~/.config/security-linux/config.json`, 0600) ;
-- configure le démarrage automatique à la session (KDE/GNOME/XDG) ;
+- configure le démarrage automatique : **service `systemd --user` durci** (sandbox) quand disponible, sinon autostart XDG ;
 - supprime l'ancien fichier `lock_proximity.sh` cassé.
 
 > Les paquets système (`python3-gi`, `python3-opencv`, `bluez`, `network-manager`, …) sont installés en option avec `sudo` ; s'ils manquent, l'application fonctionnera avec une fonctionnalité réduite (bluetooth/localisation indisponibles).
+
+### Paquets natifs (.deb / .rpm)
+
+Des **paquets natifs** sont disponibles, vérifiables et installables sans compilation :
+
+| Format | Script de build | Installé dans |
+|---|---|---|
+| Debian/Ubuntu (`.deb`) | `./scripts/build_deb.sh` → `dist/` | `sudo dpkg -i dist/security-linux_*.deb` |
+| Fedora/openSUSE (`.rpm`) | `./scripts/build_rpm.sh` (nécessite `rpmbuild`, prévu CI) | `sudo dnf install dist/*.rpm` |
+
+Un workflow GitHub Actions (`package.yml`) construit automatiquement `.deb` et `.rpm` à chaque tag `v*` et les **attache à la release**.
+
+> Le démon natif est aussi fourni en unité `systemd --user` durcie (`packaging/systemd/security-linuxd.service`, sandbox `ProtectSystem=strict`, `NoNewPrivileges`…). En paquet natif, l'autostart XDG reste actif ; pour la surcouche systemd : `systemctl --user enable --now security-linuxd.service`.
 
 ## Utilisation
 
@@ -141,10 +156,20 @@ Suspend le **verrouillage automatique** pendant une plage horaire (défaut 23h �
 
 Joue une **alarme sonore** (sirène) quand le système verrouille automatiquement du fait d'une absence détectée — un moyen de dissuader une personne non autorisée. La durée est configurable (défaut 5 s).
 
+Depuis v1.1.0-beta, une alerte est aussi déclenchée si un capteur armé devient **indisponible** (webcam débranchée/couverte pendant l'armement = tentative d'évasion possible) : notification critique systématique, alarme sonore si `on_tamper`.
+
 > L'alarme ne sonne **pas** en mode debug (verrouillage simulé).
 
 ```json
-"braquage": { "enabled": false, "alarm_duration": 5 }
+"braquage": { "enabled": false, "alarm_duration": 5, "on_tamper": true }
+```
+
+### Verrouillage de repli par inactivité
+
+Filet de sécurité **indépendant des capteurs** : si la webcam et le Bluetooth sont tous deux indisponibles, le système verrouille quand même après une inactivité prolongée. Mesure via KDE `GetSessionIdleTime` ou GNOME Mutter `GetIdletime` (0 = désactivé).
+
+```json
+"general": { "idle_lock_minutes": 0 }
 ```
 
 ### Notifications bureau
@@ -162,28 +187,32 @@ Une notification est envoyée (KDE/GNOME via `notify-send`) quand le système se
 | Détection visage | OpenCV Haar cascade, 100 % local, aucune donnée envoyée |
 | Détection Bluetooth | BlueZ local (dbus/bluetoothctl), aucun réseau |
 | Localisation | nmcli (SSID) — 100 % local, pas de geolocalisation externe |
-| Code admin | PBKDF2-SHA256 (200 000 itérations), stocké dans `~/.config/security-linux/config.json` (0600) — anti-bruteforce : 3 échecs / 10 min |
-| Commandes | JSON atomiques dans `~/.local/share/security-linux/`, supprimés après lecture |
-| Configuration | Fichier config.json en 0600 |
-| Journal | `~/.local/share/security-linux/events.log` (0600), pas de données sensibles en clair |
+| Code admin | PBKDF2-SHA256 (200 000 itérations), stocké dans `~/.config/security-linux/config.json` (0600) — anti-bruteforce : 3 échecs / 10 min, longueur minimale **6 caractères** |
+| Commandes | Canal `command.json` **authentifié HMAC-SHA256** (clé de session 0600) — toute commande mal signée est rejetée et journalisée |
+| Tamper (anti-évasion) | Un capteur armé qui disparaît → événement `tamper` + notification critique + alarme optionnelle (`braquage.on_tamper`) |
+| Configuration | Fichier config.json en 0600, répertoire de données en 0700 |
+| Journal | `~/.local/share/security-linux/events.log` (0600), rotation auto par taille + **chaîne d'intégrité SHA-256** (`verify_event_log()`) |
 
-### Limitations connues (v1)
+### Modèle de menace et limites (v1.1.0-beta)
 
-1. Le code admin est vérifié au niveau de l'application (GUI), pas au niveau du système. Un utilisateur root peut contourner la protection.
-2. La reconnaissance faciale n'est pas branchée au verrouillage d'écran en v1 (déverrouillage = mot de passe de session). Howdy est dormant — activable dans les réglages après enregistrement du visage.
-3. Le réarmement automatique hors domicile repose sur le Wi-Fi SSID ; si vous êtes hors domicile mais connecté à un WiFi « maison » (VPN ex.), le système vous considère comme « à la maison ».
+Le modèle de menace cible un **compte utilisateur non compromis** : toute personne ayant **le contrôle total de votre session** (même uid, y compris root) peut lire votre clé HMAC et modifier `config.json`. Les protections HMAC / permissions 0600 sont efficaces contre un **processus opportuniste** (script, extension de navigateur…) qui ne fait que la même chose que l'application, mais **pas** contre un attaquant déjà root.
+
+1. La reconnaissance faciale n'est pas branchée au verrouillage d'écran (déverrouillage = mot de passe de session). Howdy est dormant — activable dans les réglages après enregistrement du visage.
+2. Le réarmement automatique hors domicile repose sur le Wi-Fi SSID ; si vous êtes hors domicile mais connecté à un WiFi « maison » (ex. VPN), le système vous considère comme « à la maison ».
+3. Le verrouillage d'écran repose sur les mécanismes fournis par la session (`loginctl`, KDE `qdbus`, GNOME `gdbus`) ; sur un environnement exotique aucune des méthodes ne garantit le verrouillage.
 
 ## Architecture
 
 ```
 src/security_linux/
 ├── cli.py              # CLI (security-linux, security-linuxd)
-├── daemon.py           # Démon de surveillance (boucle 1s)
-├── engine.py           # Moteur de décision (AND/OR, grâce, réarmement, Silentium)
-├── alerts.py           # Alarme sonore (braquage) + notifications bureau
-├── lock.py             # Verrouillage d'écran (loginctl / qdbus)
-├── config.py           # Config JSON + hachage code admin
-├── events.py           # Journal + état partagé (state.json / command.json)
+├── daemon.py           # Démon de surveillance (boucle 1s, alarme tamper)
+├── engine.py           # Moteur de décision (AND/OR, grâce, réarmement, tamper, inactivité)
+├── alerts.py           # Alarme sonore (braquage/tamper) + notifications bureau
+├── lock.py             # Verrouillage d'écran (loginctl / KDE qdbus / GNOME gdbus)
+├── idle.py             # Inactivité utilisateur (KDE GetSessionIdleTime / GNOME Mutter)
+├── config.py           # Config JSON + code admin (PBKDF2, longueur minimale)
+├── events.py           # Journal chaîné + rotation +état/commandes HMAC
 ├── hashing.py          # PBKDF2-SHA256
 ├── howdy_ctrl.py       # Module dormant Howdy
 ├── runtime.py          # Modes production / debug (débogage temporaire)
@@ -193,6 +222,7 @@ src/security_linux/
 │   ├── bluetooth.py    # BlueZ (bluetoothctl)
 │   └── location.py     # nmcli (Wi-Fi) / GeoClue (GPS)
 └── gui/
+    ├── led.py          # Voyant webcam flottant
     └── app.py          # GTK3 (interrupteur, réglages, capture viewer, tray)
 ```
 
@@ -202,7 +232,7 @@ src/security_linux/
 - GTK3 via PyGObject (fourni par Debian)
 - Bluetooth : bluetoothctl (BlueZ)
 - Wi-Fi : nmcli (NetworkManager)
-- Verrouillage : loginctl / qdbus (KDE Plasma)
+- Verrouillage : loginctl / KDE qdbus / GNOME gdbus / xdg-screensaver
 
 ## Compatibilité multi-appareils et vie privée
 

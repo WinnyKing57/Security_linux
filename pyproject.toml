@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "security-linux"
-version = "1.0.0-beta"
+version = "1.1.0-beta"
 description = "Verrouillage automatique d'écran (webcam + bluetooth + localisation) et intégration Howdy - 100% local"
 readme = "README.md"
 requires-python = ">=3.10"

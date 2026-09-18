@@ -461,12 +461,18 @@ class SecurityLinuxApp:
         resp2 = dlg2.run()
         second = dlg2.get_code()
         dlg2.destroy()
-        if resp2 == Gtk.ResponseType.OK and first == second and len(first) >= 4:
+        if resp2 == Gtk.ResponseType.OK and first == second and config.valid_admin_code(first):
             config.set_admin_code(self.cfg, first)
             config.save_config(self.cfg)
             events.log_event("admin", _("code administrateur défini"))
             return True
-        events.log_event("admin", _("code administrateur non défini (annulé ou non confirmé)"))
+        if resp2 == Gtk.ResponseType.OK and first == second:
+            self._msg(
+                _("Le code doit contenir au moins {n} caractères.").format(n=config.MIN_ADMIN_CODE_LENGTH),
+                error=True,
+            )
+        else:
+            events.log_event("admin", _("code administrateur non défini (annulé ou non confirmé)"))
         return False
 
     def lock_now(self):
@@ -734,11 +740,13 @@ class SecuritySettingsDialog:
         self.grace = self._spin(self.cfg["general"]["lock_grace_seconds"], 0, 120, 1)
         self.min_absent = self._spin(self.cfg["general"].get("min_absent_seconds", 20), 5, 600, 5)
         self.autorepeat = self._spin(self.cfg["general"]["auto_lock_repeat_minutes"], 1, 60, 1)
+        self.idle_lock = self._spin(self.cfg["general"].get("idle_lock_minutes", 0), 0, 240, 1)
         for lbl, wgt in (
             (_("Mode de décision"), self.mode),
             (_("Absence minimale (s)"), self.min_absent),
             (_("Délai de grâce avant verrouillage (s)"), self.grace),
             (_("Re-verrouillage si menace persistante (min)"), self.autorepeat),
+            (_("Verrouillage de repli par inactivité (min, 0 = désactivé)"), self.idle_lock),
         ):
             row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
             row.pack_start(Gtk.Label(label=lbl, xalign=0), True, True, 0)
@@ -1031,8 +1039,15 @@ class SecuritySettingsDialog:
         brow2.pack_end(self.braquage_duration, False, True, 0)
         braquage_box.pack_start(brow2, False, True, 0)
 
+        self.braquage_tamper = Gtk.Switch(active=bool(b.get("on_tamper", True)))
+        brow3 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        brow3.pack_start(Gtk.Label(label=_("Alarme si un capteur armé disparaît"), xalign=0), True, True, 0)
+        brow3.pack_end(self.braquage_tamper, False, True, 0)
+        braquage_box.pack_start(brow3, False, True, 0)
+
         braquage_box.pack_start(
-            Gtk.Label(label=_("Une alarme sonore retentit en cas d'intrusion détectée.\n"
+            Gtk.Label(label=_("Une alarme sonore retentit en cas d'intrusion détectée,\n"
+                             "y compris si la webcam/BT devient indisponible pendant l'armement.\n"
                              "Attention : peut être bruyant !"),
                       xalign=0),
             False, True, 0,
@@ -1169,6 +1184,9 @@ class SecuritySettingsDialog:
             want = False
         h["enabled"] = want
 
+        # Général
+        self.cfg["general"]["idle_lock_minutes"] = int(self.idle_lock.get_value())
+
         # Fonctions avancées
         s = self.cfg.setdefault("silentium", {})
         s["enabled"] = self.silentium_enabled.get_active()
@@ -1178,6 +1196,7 @@ class SecuritySettingsDialog:
         bq = self.cfg.setdefault("braquage", {})
         bq["enabled"] = self.braquage_enabled.get_active()
         bq["alarm_duration"] = int(self.braquage_duration.get_value())
+        bq["on_tamper"] = self.braquage_tamper.get_active()
 
         n = self.cfg.setdefault("notifications", {})
         n["rearm"] = self.notif_rearm.get_active()

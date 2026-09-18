@@ -57,6 +57,8 @@ def lock_screen() -> bool:
     for cmd_prefix in (
         ["qdbus6", "org.kde.screensaver", "/ScreenSaver", "Lock"],
         ["qdbus", "org.kde.screensaver", "/ScreenSaver", "Lock"],
+        ["gdbus", "call", "--session", "--dest", "org.gnome.ScreenSaver",
+         "--object-path", "/org/gnome/ScreenSaver", "--method", "org.gnome.ScreenSaver.Lock"],
         ["xdg-screensaver", "lock"],
     ):
         rc, _ = _run(list(cmd_prefix), timeout=8)

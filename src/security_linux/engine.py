@@ -16,6 +16,7 @@ import time
 
 import security_linux.config as config
 import security_linux.events as events
+from security_linux import idle
 from security_linux.i18n import _
 from security_linux.monitors import MonitorResult
 
@@ -43,6 +44,32 @@ class Engine:
         self._is_locked_fn = is_locked_fn
         self._pending_since: float | None = None
         self._last_lock_ts: float | None = None
+        # États précédents des capteurs (détection de disparition soudaine).
+        self._prev_status: dict[str, str] = {}
+
+    def _detect_tamper(self, states: dict[str, MonitorResult], armed: bool) -> bool:
+        """Un capteur disponible puis 'unavailable' pendant l'armement est
+        traité comme un signal d'évasion possible, pas comme une simple
+        exclusion du calcul de décision."""
+        tamper = False
+        for key in ("camera", "bluetooth"):
+            mon = states.get(key)
+            if mon is None:
+                continue
+            status = getattr(mon, "status", "")
+            prev = self._prev_status.get(key)
+            if (
+                armed
+                and prev not in (None, "unavailable", "disabled", "unconfigured")
+                and status == "unavailable"
+            ):
+                tamper = True
+                events.log_event(
+                    "tamper",
+                    _("capteur {key} indisponible pendant l'armement (évasion possible ?)").format(key=key),
+                )
+            self._prev_status[key] = status
+        return tamper
 
     def _conditions_met(self, states: dict[str, MonitorResult]) -> dict:
         gen = self.cfg["general"]
@@ -104,6 +131,7 @@ class Engine:
         gen = self.cfg["general"]
         grace = float(gen.get("lock_grace_seconds", 10))
         repeat_min = float(gen.get("auto_lock_repeat_minutes", 3)) * 60.0
+        idle_minutes = float(gen.get("idle_lock_minutes", 0))
         secure_offline = self.cfg["location"].get("secure_when_offline", True)
 
         loc = states.get("location")
@@ -114,6 +142,7 @@ class Engine:
 
         decision = {"armed": armed_state, "conditions": cond, "action": None,
                     "silentium_active": silentium}
+        decision["tamper"] = self._detect_tamper(states, armed_state["armed"])
 
         if not armed_state["armed"]:
             self._pending_since = None
@@ -142,6 +171,23 @@ class Engine:
         else:
             self._pending_since = None
             decision["time_to_lock"] = 0.0
+
+        # Filet de sécurité : verrouillage de repli sur inactivité prolongée,
+        # indépendant des capteurs (utile si webcam + Bluetooth sont tous deux
+        # indisponibles). 0 = désactivé.
+        if idle_minutes > 0 and decision["action"] is None:
+            idle_sec = idle.idle_seconds()
+            if idle_sec is not None and idle_sec >= idle_minutes * 60:
+                if self._last_lock_ts is None or (now - self._last_lock_ts) > repeat_min:
+                    ok = self._lock_fn()
+                    self._last_lock_ts = now
+                    decision["action"] = "lock" if ok else "lock_failed"
+                    events.log_event(
+                        "lock",
+                        _("verrouillage par inactivité ({inactivite}s >= {seuil} min)").format(
+                            inactivite=int(idle_sec), seuil=idle_minutes
+                        ),
+                    )
 
         if self._is_locked_fn():
             # si l'utilisateur déverrouille alors que la menace persiste, re-verrouiller

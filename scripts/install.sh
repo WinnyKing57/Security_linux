@@ -99,6 +99,11 @@ create_config() {
 # ------------------------------------------------------------ autostart + lanceur
 install_autostart() {
   echo "==> Démarrage automatique à l'ouverture de session"
+  # Le service systemd --user (durci) est préféré quand il est disponible.
+  if "$REPO_DIR/scripts/install_user_service.sh"; then
+    echo "    démon géré par systemd --user (autostart XDG ignoré)"
+    return 0
+  fi
   mkdir -p "$AUTOSTART_DIR"
   cat > "$AUTOSTART_DIR/security-linux.desktop" <<EOF
 [Desktop Entry]

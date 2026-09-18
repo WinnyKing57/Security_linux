@@ -239,7 +239,21 @@ installation ni à des données réelles, sur n'importe quelle machine ».
 5. **Isolation des tests** — `tests/conftest.py` force le mode debug : plus aucun `pytest` ne touche la config utilisateur de production — **TERMINÉ** (corrige l'écrasement de la config/admin-code par les tests)
 6. **Désarmement admin** — rechargement de la config après vérification admin (ne récrit plus un compteur de tentatives périmé) — **CORRIGÉ** (`on_armed_toggle`)
 
-### ❌ Tâches restantes :
-1. **Tests Bluetooth conditions réelles** - validation en conditions réelles d'éloignement — **À FAIRE** (nécessite test physique)
-2. **Paquets natifs .deb/.rpm (optionnel)** - désormais facilité par le script d'installation ; des paquets natifs via CI restent possibles — **À FAIRE** (optionnel)
+### ✅ Tâches v1.1.0-beta terminées (durcissement sécurité + packaging) :
+1. **Canal de commande authentifié (HMAC)** — `command.json` est signé HMAC-SHA256 avec une clé de session (0600) ; le démon **rejette** toute commande mal signée et journalise la tentative — **TERMINÉ** (`events.py` `_load_session_key`/`_sign`/`consume_command`)
+2. **Capteur armé indisponible = teinte anti-évasion** — un moniteur `present` qui passe `unavailable` pendant l'armement déclenche un événement de sécurité, une notification critique et, si le mode braquage est actif + `on_tamper`, une alarme — **TERMINÉ** (`engine._detect_tamper`, `daemon._handle_tamper`, réglage GUI « Alarme si un capteur armé disparaît »)
+3. **Fallback GNOME natif** — `org.gnome.ScreenSaver.Lock` via `gdbus` ajouté à la chaîne de verrouillage (loginctl → KDE qdbus → GNOME gdbus → xdg-screensaver) — **TERMINÉ** (`lock.py`)
+4. **Code admin : longueur minimale 6** — validation centralisée `config.valid_admin_code()`, GUI et CLI alignés, `set_admin_code()` refuse tout code trop court — **TERMINÉ**
+5. **Journal : rotation + chaîne d'intégrité** — rotation auto par taille (1 Mio, 5 archives) + chaque ligne porte le SHA-256 de la précédente (`chain`) ; `verify_event_log()` détecte toute édition/suppression — **TERMINÉ** (`events.py`)
+6. **Démon en service `systemd --user` durci** — unité avec `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome=read-only`, `ReadWritePaths` ciblés… (`packaging/systemd/security-linuxd.service`, `scripts/install_user_service.sh`, install.sh privilégiant systemd puis repli autostart) — **TERMINÉ**
+7. **Verrouillage de repli par inactivité** — filet de sécurité indépendant des capteurs (seuil `general.idle_lock_minutes`, 0 = désactivé, mesure KDE `GetSessionIdleTime` / GNOME Mutter `GetIdletime`) — **TERMINÉ** (`idle.py`, `engine.py`, réglage GUI)
+8. **Paquets natifs .deb/.rpm** — `scripts/build_deb.sh` (dpkg-deb+fakeroot, vérifié localement) ; `packaging/security-linux.spec` + `scripts/build_rpm.sh` (CI Fedora) ; workflow GitHub Actions `package.yml` (tag `v*` → .deb/.rpm attachés à la release) — **TERMINÉ**
+
+### ❌ Tâches restantes (v1.1.0-beta et au-delà) :
+1. **Tests Bluetooth conditions réelles** — validation en conditions réelles d'éloignement — **À FAIRE** (nécessite test physique)
+2. **2FA réel une fois Howdy activé** — exiger visage **ET** code/mot de passe pour désarmer (aujourd'hui Howdy est dormant ; à l'activation il remplacerait le PAM, pas un facteur additionnel) — **À FAIRE** (nécessite Howdy actif)
+3. **Compte rendu d'intrusion consolidé** — regrouper capture + log + snapshot BT/localisation dans un rapport horodaté unique à chaque déclenchement du mode braquage — **À FAIRE**
+4. **Export/rotation chiffrée des journaux et captures** — consultation a posteriori en cas d'incident réel — **À FAIRE**
+5. **Verrou physique / capteur de proximité complémentaire** (couvercle webcam, dépend du matériel) — **À ÉTUDIER**
+6. **Argon2id** pour le code admin (plus résistant au craquage GPU que PBKDF2-SHA256 200k) — **À ÉTUDIER**
 3. **Voyant quand la GUI est fermée** - comportement de la LED physique de la webcam (sondages du démon) à la fermeture — **À DÉFINIR**

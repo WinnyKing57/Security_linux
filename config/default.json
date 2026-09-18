@@ -4,7 +4,8 @@
     "decision_mode": "AND",
     "lock_grace_seconds": 10,
     "min_absent_seconds": 20,
-    "auto_lock_repeat_minutes": 3
+    "auto_lock_repeat_minutes": 3,
+    "idle_lock_minutes": 0
   },
   "camera": {
     "enabled": true,
@@ -44,9 +45,17 @@
   },
   "braquage": {
     "enabled": false,
-    "alarm_duration": 5
+    "alarm_duration": 5,
+    "on_tamper": true
   },
   "notifications": {
     "rearm": true
+  },
+  "led": {
+    "enabled": false,
+    "x": null,
+    "y": null,
+    "size": 18,
+    "lit_seconds": 1.5
   }
 }

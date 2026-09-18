@@ -11,7 +11,7 @@ POT="${LOCALEDIR}/${DOT}.pot"
 # Extraction
 echo ">>> Extraction des chaînes..."
 xgettext --from-code=UTF-8 --package-name=security-linux \
-  --package-version=1.0.0-beta --add-comments= -o "$POT" $SRC
+  --package-version=1.1.0-beta --add-comments= -o "$POT" $SRC
 
 # Mise à jour de chaque catalogue .po (fusion avec msgmerge)
 for PODIR in "${LOCALEDIR}"/*/; do

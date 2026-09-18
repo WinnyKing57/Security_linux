@@ -1,0 +1,51 @@
+name: package
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prérequis
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fakeroot dpkg-dev
+      - name: Construire le .deb
+        run: bash scripts/build_deb.sh
+      - name: Uploader l'artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: dist/*.deb
+
+  rpm:
+    runs-on: fedora-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prérequis
+        run: sudo dnf install -y rpm-build python3-devel
+      - name: Construire le .rpm
+        run: bash scripts/build_rpm.sh
+      - name: Uploader l'artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm
+          path: dist/*.rpm
+
+  release:
+    needs: [deb, rpm]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Télécharger les artefacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Rattacher à la release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/deb/*.deb
+            artifacts/rpm/*.rpm

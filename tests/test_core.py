@@ -30,10 +30,10 @@ def test_hashing_roundtrip():
 
 def test_config_admin_code():
     cfg = copy.deepcopy(DEFAULT_CONFIG)
-    assert not verify_admin_code(cfg, "1234")
-    set_admin_code(cfg, "1234")
-    assert verify_admin_code(cfg, "1234")
-    assert not verify_admin_code(cfg, "9999")
+    assert not verify_admin_code(cfg, "123456")
+    set_admin_code(cfg, "123456")
+    assert verify_admin_code(cfg, "123456")
+    assert not verify_admin_code(cfg, "999999")
 
 
 def test_config_merge_and_roundtrip(tmp_path):

@@ -95,8 +95,8 @@ def cmd_set_code(_args) -> int:
     if code != confirm:
         print(_("Les codes ne correspondent pas."))
         return 1
-    if len(code) < 4:
-        print(_("Le code doit contenir au moins 4 caractères."))
+    if not config.valid_admin_code(code):
+        print(_("Le code doit contenir au moins {n} caractères.").format(n=config.MIN_ADMIN_CODE_LENGTH))
         return 1
     config.set_admin_code(cfg, code)
     config.save_config(cfg)

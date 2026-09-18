@@ -13,6 +13,8 @@ import security_linux.hashing as hashing
 import security_linux.runtime as runtime
 from security_linux.i18n import _
 
+MIN_ADMIN_CODE_LENGTH = 6
+
 DEFAULT_CONFIG = {
     "general": {
         "armed": True,
@@ -20,6 +22,7 @@ DEFAULT_CONFIG = {
         "lock_grace_seconds": 10,
         "auto_lock_repeat_minutes": 3,
         "min_absent_seconds": 20,
+        "idle_lock_minutes": 0,
     },
     "camera": {
         "enabled": True,
@@ -60,6 +63,7 @@ DEFAULT_CONFIG = {
     "braquage": {
         "enabled": False,
         "alarm_duration": 5,
+        "on_tamper": True,
     },
     "notifications": {
         "rearm": True,
@@ -131,7 +135,16 @@ def has_admin_code(cfg: dict) -> bool:
     return bool(cfg["admin_code"]["hash"]) and bool(cfg["admin_code"]["salt"])
 
 
+def valid_admin_code(code: str) -> bool:
+    """Un code admin doit contenir au moins MIN_ADMIN_CODE_LENGTH caractères."""
+    return isinstance(code, str) and len(code.strip()) >= MIN_ADMIN_CODE_LENGTH
+
+
 def set_admin_code(cfg: dict, code: str) -> None:
+    if not valid_admin_code(code):
+        raise ValueError(
+            _("le code admin doit contenir au moins {n} caractères").format(n=MIN_ADMIN_CODE_LENGTH)
+        )
     cfg["admin_code"]["salt"] = hashing.generate_salt()
     cfg["admin_code"]["hash"] = hashing.hash_code(code, cfg["admin_code"]["salt"])
 

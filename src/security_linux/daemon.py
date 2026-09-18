@@ -272,6 +272,8 @@ class Daemon:
                             events.log_event("error", _("capture : {erreur}").format(erreur=exc))
                 if decision.get("action") in ("lock", "relock") and not runtime.is_debug():
                     self._trigger_braquage()
+                if decision.get("tamper") and not runtime.is_debug():
+                    self._handle_tamper()
                 self._maybe_notify_rearm(decision)
                 self._publish(cached, decision)
                 if self.one_shot:
@@ -301,6 +303,18 @@ class Daemon:
                 events.log_event("error", _("alarme : {erreur}").format(erreur=exc))
 
         threading.Thread(target=_play, daemon=True).start()
+
+    def _handle_tamper(self) -> None:
+        """Disparition d'un capteur armé : notification critique + alarme
+        (si le mode braquage est actif et ``on_tamper`` activé)."""
+        brq = self.cfg.get("braquage", {})
+        try:
+            alerts.send_intrusion_alert("intrusion_detectee")
+        except Exception as exc:  # noqa: BLE001
+            events.log_event("error", _("alerte intrusion : {erreur}").format(erreur=exc))
+        if brq.get("enabled", False) and brq.get("on_tamper", True):
+            events.log_event("tamper", _("alarme déclenchée suite à la disparition d'un capteur armé"))
+            self._trigger_braquage()
 
     def _maybe_notify_rearm(self, decision: dict) -> None:
         """Notification bureau quand le système se réarme automatiquement."""
