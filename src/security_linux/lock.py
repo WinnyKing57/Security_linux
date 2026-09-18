@@ -5,6 +5,7 @@ import os
 import subprocess
 
 import security_linux.events as events
+from security_linux.i18n import _
 
 
 def _run(cmd: list[str], timeout: float = 10) -> tuple[int, str]:
@@ -51,7 +52,7 @@ def lock_screen() -> bool:
     if session_id:
         rc, msg = _run(["loginctl", "lock-session", session_id])
         if rc == 0:
-            events.log_event("lock", f"écran verrouillé (session {session_id})")
+            events.log_event("lock", _("écran verrouillé (session {session})").format(session=session_id))
             return True
     for cmd_prefix in (
         ["qdbus6", "org.kde.screensaver", "/ScreenSaver", "Lock"],
@@ -60,9 +61,9 @@ def lock_screen() -> bool:
     ):
         rc, _ = _run(list(cmd_prefix), timeout=8)
         if rc == 0:
-            events.log_event("lock", f"écran verrouillé via {' '.join(cmd_prefix)}")
+            events.log_event("lock", _("écran verrouillé via {commande}").format(commande=" ".join(cmd_prefix)))
             return True
-    events.log_event("error", "échec du verrouillage d'écran")
+    events.log_event("error", _("échec du verrouillage d'écran"))
     return False
 
 

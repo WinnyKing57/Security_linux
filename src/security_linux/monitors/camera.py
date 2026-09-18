@@ -9,6 +9,8 @@ import os
 import time
 
 import security_linux.config as config
+import security_linux.led as led
+from security_linux.i18n import _
 from security_linux.monitors.base import Monitor, MonitorResult
 
 
@@ -101,6 +103,7 @@ class CameraMonitor(Monitor):
             ok, frame = cap.read()
             if not ok or frame is None or frame.size == 0:
                 return True
+            led.blink()
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             gray = cv2.equalizeHist(gray)
             faces = cascade.detectMultiScale(gray, scaleFactor=1.2, minNeighbors=5, minSize=(60, 60))
@@ -120,6 +123,7 @@ class CameraMonitor(Monitor):
             ok, frame = cap.read()
             if not ok or frame is None:
                 return None
+            led.blink()
             drop = config.data_dir() / "captures"
             os.makedirs(drop, exist_ok=True)
             os.chmod(drop, 0o700)
@@ -137,13 +141,13 @@ class CameraMonitor(Monitor):
         import time as _time
 
         if not self.enabled():
-            return MonitorResult(self.name, "disabled", "moniteur coupé")
+            return MonitorResult(self.name, "disabled", _("moniteur coupé"))
         if not self.supported():
-            return MonitorResult(self.name, "unavailable", "webcam ou OpenCV indisponible")
+            return MonitorResult(self.name, "unavailable", _("webcam ou OpenCV indisponible"))
         self._device = self.cfg.get("device", self._device)
         faces_seen = 0
         try:
-            for _ in range(max(1, self._confirm_frames)):
+            for _frame in range(max(1, self._confirm_frames)):
                 if self.face_detected():
                     faces_seen += 1
                 if faces_seen > 0:
@@ -155,11 +159,12 @@ class CameraMonitor(Monitor):
         present = faces_seen > 0
         self._start_absent_if(not present, _time.time())
         if present:
-            return MonitorResult(self.name, "present", "visage détecté")
+            return MonitorResult(self.name, "present", _("visage détecté"))
         elapsed = int(self.absent_elapsed_seconds)
         return MonitorResult(
             self.name,
             "absent",
-            f"aucun visage depuis {elapsed}s",
+            _("aucun visage depuis {secondes}s").format(secondes=elapsed),
             absent_since=self.absent_since,
+            extra={"absent_elapsed_seconds": elapsed},
         )

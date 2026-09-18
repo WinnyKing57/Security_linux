@@ -13,6 +13,7 @@ from __future__ import annotations
 import math
 import subprocess
 
+from security_linux.i18n import _
 from security_linux.monitors.base import Monitor, MonitorResult
 
 
@@ -91,34 +92,34 @@ class LocationMonitor(Monitor):
                 home_lon = float(cfg.get("home_lon", 0.0))
                 radius = float(cfg.get("radius_km", 1.0))
                 if home_lat == 0.0 and home_lon == 0.0:
-                    return self._unconfigured("GPS: coordonnées domicile non définies", offline)
+                    return self._unconfigured(_("GPS : coordonnées domicile non définies"), offline)
                 dist = _haversine_km(lat, lon, home_lat, home_lon)
                 at_home = dist <= radius
                 return self._finish(
                     at_home,
                     offline,
-                    f"GPS: dist {dist:.2f} km (rayon {radius} km)",
+                    _("GPS : dist {distance:.2f} km (rayon {rayon} km)").format(distance=dist, rayon=radius),
                 )
 
         # repli wifi (défaut)
         ssid = self.current_wifi_ssid()
         if ssid is None:
-            return self._finish(False, offline, "aucun réseau Wi-Fi actif")
+            return self._finish(False, offline, _("aucun réseau Wi-Fi actif"))
         if not home_ssids:
             # Aucun SSID 'maison' défini : on ne peut pas juger — statut neutre.
             # Sinon "hors domicile" forcerait un réarmement immédiat (piège).
             return self._unconfigured(
-                f"Wi-Fi: {ssid} — SSID 'maison' non défini dans les réglages", offline
+                _("Wi-Fi : {ssid} — SSID 'maison' non défini dans les réglages").format(ssid=ssid), offline
             )
         at_home = ssid.strip().lower() in home_ssids
-        detail = f"Wi-Fi: {ssid}" + (" (maison)" if at_home else " (hors domicile)")
+        detail = _("Wi-Fi : {ssid}").format(ssid=ssid) + (_(" (maison)") if at_home else _(" (hors domicile)"))
         return self._finish(at_home, offline, detail)
 
     def _unconfigured(self, detail: str, offline: bool) -> MonitorResult:
         """Localisation non configurée : neutre (ni maison, ni hors domicile).
         at_home à None pour ne pas déclencher de réarmement forcé (le moteur
         ignore aussi le statut hors-ligne quand la localisation est non configurée)."""
-        suffix = " ; hors ligne" if offline else ""
+        suffix = _(" ; hors ligne") if offline else ""
         return MonitorResult(
             self.name,
             "unconfigured",
@@ -130,9 +131,9 @@ class LocationMonitor(Monitor):
     def _finish(self, at_home: bool, offline: bool, detail: str) -> MonitorResult:
         status = "home" if at_home else "away"
         if at_home:
-            detail += " ; connecté" if not offline else " ; hors ligne"
+            detail += _(" ; connecté") if not offline else _(" ; hors ligne")
         else:
-            detail += " ; hors ligne" if offline else " ; en ligne (hors domicile)"
+            detail += _(" ; hors ligne") if offline else _(" ; en ligne (hors domicile)")
         return MonitorResult(
             self.name,
             status,

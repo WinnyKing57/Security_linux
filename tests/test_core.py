@@ -102,6 +102,46 @@ def test_engine_and_mode():
     assert locks["n"] == 1
 
 
+def test_engine_uses_monitorresult_elapsed_extra():
+    """Régression : les vrais moniteurs produisent des MonitorResult, leur
+    durée d'absence circule dans ``extra["absent_elapsed_seconds"]``. Sans
+    cela, elapsed vaut toujours 0 et le verrouillage ne se déclenche jamais.
+    """
+    cfg = copy.deepcopy(DEFAULT_CONFIG)
+    cfg["general"]["decision_mode"] = "AND"
+    cfg["general"]["lock_grace_seconds"] = 0
+    cfg["general"]["min_absent_seconds"] = 20
+    engine, locks = _make_engine(cfg)
+
+    states = {
+        # bluetooth désactivé (statut "disabled") : ignoré par le moteur
+        "camera": MonitorResult("camera", "absent", absent_since="2026-09-18T00:00:00",
+                                extra={"absent_elapsed_seconds": 30}),
+        "bluetooth": MonitorResult("bluetooth", "disabled"),
+        "location": MonitorResult("location", "home", at_home=True, offline=False),
+    }
+    decision = engine.tick(states, manual_armed=True)
+    assert decision["action"] == "lock"
+    assert locks["n"] == 1
+
+
+def test_engine_falls_back_to_absent_since():
+    cfg = copy.deepcopy(DEFAULT_CONFIG)
+    cfg["general"]["decision_mode"] = "AND"
+    cfg["general"]["lock_grace_seconds"] = 0
+    cfg["general"]["min_absent_seconds"] = 1
+    engine, locks = _make_engine(cfg)
+
+    states = {
+        "camera": MonitorResult("camera", "absent", absent_since="2026-09-18T00:00:00"),
+        "bluetooth": MonitorResult("bluetooth", "disabled"),
+        "location": MonitorResult("location", "home", at_home=True, offline=False),
+    }
+    decision = engine.tick(states, manual_armed=True)
+    assert decision["action"] == "lock"
+    assert locks["n"] == 1
+
+
 def test_engine_and_mode_needs_both():
     cfg = copy.deepcopy(DEFAULT_CONFIG)
     cfg["general"]["decision_mode"] = "AND"
@@ -389,6 +429,20 @@ def test_camera_list_devices():
         assert "/dev/video0" in devs
 
 
+def test_camera_tick_no_shadowed_underscore(monkeypatch):
+    """Régression : ``for _ in range(...)`` dans tick() ne doit pas écraser la
+    fonction gettext ``_`` (sinon -> TypeError 'int' object is not callable).
+    """
+    from security_linux.monitors.camera import CameraMonitor
+
+    mon = CameraMonitor({"enabled": True, "device": "/dev/video0", "absent_confirmations": 3})
+    mon.supported = lambda: True
+    mon.face_detected = lambda: False
+    res = mon.tick()
+    assert res.status == "absent"
+    assert "aucun visage" in res.detail
+
+
 def test_camera_device_label_fallback():
     from security_linux.monitors.camera import CameraMonitor
 
@@ -453,3 +507,29 @@ def test_howdy_models_status_detects_dat_file(monkeypatch):
     assert howdy_ctrl.models_status(model_dir) == "ok"
     # répertoire absent -> none
     assert howdy_ctrl.models_status("/tmp/does-not-exist-xyz") == "none"
+
+
+# ------------------------------------------------------------ voyant webcam
+def test_led_marker_roundtrip(monkeypatch):
+    from datetime import datetime, timezone as _tz
+
+    monkeypatch.setenv("SECURITY_LINUX_MODE", "debug")
+    import security_linux.led as led
+    from security_linux.config import data_dir
+
+    marker = data_dir() / "capture_led.json"
+    marker.unlink(missing_ok=True)
+
+    # aucun clignotement encore émis -> None
+    assert led.last_blink() is None
+    led.blink()
+    ts = led.last_blink()
+    assert ts is not None
+    assert (datetime.now(_tz.utc) - ts).total_seconds() < 5
+
+
+def test_led_marker_config_default():
+    import security_linux.config as cfgmod
+
+    assert "led" in cfgmod.DEFAULT_CONFIG
+    assert cfgmod.DEFAULT_CONFIG["led"]["enabled"] is False

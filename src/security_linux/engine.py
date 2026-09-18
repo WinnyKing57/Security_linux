@@ -16,6 +16,7 @@ import time
 
 import security_linux.config as config
 import security_linux.events as events
+from security_linux.i18n import _
 from security_linux.monitors import MonitorResult
 
 
@@ -57,23 +58,47 @@ class Engine:
                 continue
             if mon.status == "unavailable":
                 continue
-            elapsed = 0.0
-            if hasattr(mon, "absent_elapsed_seconds"):
-                elapsed = mon.absent_elapsed_seconds
-            else:
-                elapsed = float(mon.extra.get("absent_elapsed_seconds", 0.0))
+            elapsed = self._absent_elapsed(mon)
             satisfied = mon.status == "absent" and elapsed >= min_absent
             cand[key] = satisfied
             if satisfied:
-                reasons.append(f"{key}: absent depuis {int(elapsed)}s (>= {int(min_absent)}s)")
+                reasons.append(_("{key} : absent depuis {secondes}s (>= {seuil}s)").format(key=key, secondes=int(elapsed), seuil=int(min_absent)))
             else:
-                reasons.append(f"{key}: OK / pas assez absent")
+                reasons.append(_("{key} : OK / pas assez absent").format(key=key))
 
         if mode == "OR":
             met = any(cand.values()) if cand else False
         else:
             met = all(cand.values()) if cand else False
         return {"met": met, "reasons": reasons, "counts": cand}
+
+    @staticmethod
+    def _absent_elapsed(mon: MonitorResult) -> float:
+        """Durée d'absence en secondes, tous formats gérés.
+
+        Le moniteur expose sa propre horloge interne (`absent_elapsed_seconds`
+        sur l'objet Monitor), sinon la durée est relue dans `extra` (rempli par
+        les moniteurs à chaque résultat absent), sinon calculée depuis
+        `absent_since`. Ne jamais retomber silencieusement sur 0 : sinon la
+        condition « absent depuis N s » ne peut jamais être satisfaite.
+        """
+        elapsed = getattr(mon, "absent_elapsed_seconds", None)
+        if elapsed is not None:
+            return float(elapsed)
+        elapsed = float(mon.extra.get("absent_elapsed_seconds", 0.0))
+        if elapsed > 0.0:
+            return elapsed
+        if mon.absent_since:
+            try:
+                from datetime import datetime, timezone
+
+                parsed = datetime.fromisoformat(str(mon.absent_since).replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                return max(0.0, (datetime.now(timezone.utc) - parsed).total_seconds())
+            except ValueError:
+                pass
+        return 0.0
 
     def tick(self, states: dict[str, MonitorResult], manual_armed: bool) -> dict:
         gen = self.cfg["general"]
@@ -111,7 +136,7 @@ class Engine:
                     self._last_lock_ts = now
                     self._pending_since = None
                     decision["action"] = "lock" if ok else "lock_failed"
-                    events.log_event("lock", f"verrouillage automatique déclenché ({', '.join(cond['reasons'])})")
+                    events.log_event("lock", _("verrouillage automatique déclenché ({conditions})").format(conditions=", ".join(cond["reasons"])))
             decision["pending_since"] = self._pending_since
             decision["time_to_lock"] = max(0.0, grace - elapsed)
         else:

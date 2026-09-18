@@ -1,0 +1,1104 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: security-linux\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-18 18:19+0200\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: security-linux i18n\n"
+
+#. Fallback: affichage terminal
+#: src/security_linux/alerts.py:116
+#, python-brace-format
+msgid "[NOTIFICATION] {titre} : {message}"
+msgstr "[NOTIFICATION] {titre}: {message}"
+
+#: src/security_linux/alerts.py:127 src/security_linux/alerts.py:128
+#: src/security_linux/alerts.py:133
+msgid "Protection réactivée"
+msgstr "Protection reactivated"
+
+#: src/security_linux/alerts.py:127
+msgid ""
+"Vous avez quitté votre domicile. Le système s'est réarmé automatiquement."
+msgstr "You left your home. The system re-armed automatically."
+
+#: src/security_linux/alerts.py:128
+msgid "Réseau perdu. Le système s'est réarmé automatiquement (mode sécurisé)."
+msgstr "Network lost. The system re-armed automatically (secure mode)."
+
+#: src/security_linux/alerts.py:129
+msgid "Protection activée"
+msgstr "Protection activated"
+
+#: src/security_linux/alerts.py:129
+msgid "La protection a été activée manuellement."
+msgstr "Protection was activated manually."
+
+#: src/security_linux/alerts.py:134
+#, python-brace-format
+msgid "Le système s'est réarmé automatiquement ({raison})."
+msgstr "The system re-armed automatically ({raison})."
+
+#: src/security_linux/alerts.py:147
+msgid "⚠️ Visage non détecté"
+msgstr "⚠️ Face not detected"
+
+#: src/security_linux/alerts.py:147
+msgid "Aucun visage n'a été détecté devant l'écran. Verrouillage en cours..."
+msgstr "No face was detected in front of the screen. Locking in progress..."
+
+#: src/security_linux/alerts.py:148
+msgid "📱 Appareil Bluetooth absent"
+msgstr "📱 Bluetooth device absent"
+
+#: src/security_linux/alerts.py:148
+msgid "Votre appareil Bluetooth n'est plus à portée. Verrouillage en cours..."
+msgstr "Your Bluetooth device is out of range. Locking in progress..."
+
+#: src/security_linux/alerts.py:149
+msgid "🚨 ALERTE INTRUSION"
+msgstr "🚨 INTRUSION ALERT"
+
+#: src/security_linux/alerts.py:149
+msgid "Un mouvement ou une présence suspecte a été détectée !"
+msgstr "Suspicious movement or presence detected!"
+
+#: src/security_linux/alerts.py:153
+msgid "⚠️ Alerte sécurité"
+msgstr "⚠️ Security alert"
+
+#: src/security_linux/alerts.py:154
+msgid "Une anomalie de sécurité a été détectée."
+msgstr "A security anomaly was detected."
+
+#: src/security_linux/cli.py:33
+msgid "Pas de démon actif (état inconnu)."
+msgstr "No active daemon (unknown state)."
+
+#: src/security_linux/cli.py:36
+msgid "Mode : {}"
+msgstr "Mode: {}"
+
+#: src/security_linux/cli.py:37
+msgid "État machine : {}"
+msgstr "Machine state: {}"
+
+#: src/security_linux/cli.py:38
+msgid "Armé manuellement : {}"
+msgstr "Manually armed: {}"
+
+#: src/security_linux/cli.py:39
+msgid "Armé (forcé, hors domicile/hors-ligne) : {}"
+msgstr "Armed (forced, away/offline): {}"
+
+#: src/security_linux/cli.py:40
+msgid "Armement effectif : {}"
+msgstr "Effective arm state: {}"
+
+#: src/security_linux/cli.py:41
+msgid "Moniteurs :"
+msgstr "Monitors:"
+
+#: src/security_linux/cli.py:62
+msgid "Système ARMÉ."
+msgstr "System ARMED."
+
+#: src/security_linux/cli.py:69
+msgid ""
+"Aucun code admin défini. Lancez l'application graphique pour en créer un."
+msgstr "No admin code set. Launch the graphical application to create one."
+
+#: src/security_linux/cli.py:71
+msgid "Code administrateur : "
+msgstr "Administrator code: "
+
+#: src/security_linux/cli.py:73
+msgid "Code invalide."
+msgstr "Invalid code."
+
+#: src/security_linux/cli.py:76
+msgid "Système DÉSARMÉ."
+msgstr "System DISARMED."
+
+#: src/security_linux/cli.py:89
+msgid "Code admin actuel : "
+msgstr "Current admin code: "
+
+#: src/security_linux/cli.py:91
+msgid "Code actuel invalide."
+msgstr "Current code is invalid."
+
+#: src/security_linux/cli.py:93
+msgid "Nouveau code admin : "
+msgstr "New admin code: "
+
+#: src/security_linux/cli.py:94
+msgid "Confirmez : "
+msgstr "Confirm: "
+
+#: src/security_linux/cli.py:96
+msgid "Les codes ne correspondent pas."
+msgstr "The codes do not match."
+
+#: src/security_linux/cli.py:99
+msgid "Le code doit contenir au moins 4 caractères."
+msgstr "The code must contain at least 4 characters."
+
+#: src/security_linux/cli.py:103
+msgid "Code admin mis à jour."
+msgstr "Admin code updated."
+
+#: src/security_linux/cli.py:111
+msgid "Config par défaut utilisée."
+msgstr "Default config used."
+
+#: src/security_linux/cli.py:146
+msgid "mode développement temporaire (config/état isolés, verrouillage simulé)"
+msgstr "temporary development mode (isolated config/state, simulated locking)"
+
+#: src/security_linux/cli.py:148
+msgid "état courant"
+msgstr "current status"
+
+#: src/security_linux/cli.py:149
+msgid "armer"
+msgstr "arm"
+
+#: src/security_linux/cli.py:150
+msgid "désarmer (code admin)"
+msgstr "disarm (admin code)"
+
+#: src/security_linux/cli.py:151
+msgid "verrouiller l'écran tout de suite"
+msgstr "lock the screen immediately"
+
+#: src/security_linux/cli.py:152
+msgid "définir/changer le code admin"
+msgstr "set/change the admin code"
+
+#: src/security_linux/cli.py:153
+msgid "liste des appareils Bluetooth"
+msgstr "list of Bluetooth devices"
+
+#: src/security_linux/cli.py:154
+msgid "ouvrir l'application graphique"
+msgstr "open the graphical application"
+
+#: src/security_linux/cli.py:155
+msgid "démarrer le démon"
+msgstr "start the daemon"
+
+#: src/security_linux/cli.py:156
+msgid "une seule itération puis s'arrête"
+msgstr "run a single iteration then stop"
+
+#: src/security_linux/cli.py:157 src/security_linux/daemon.py:380
+msgid "injecter l'état webcam (debug)"
+msgstr "inject webcam state (debug)"
+
+#: src/security_linux/cli.py:158 src/security_linux/daemon.py:381
+msgid "injecter l'état Bluetooth (debug)"
+msgstr "inject Bluetooth state (debug)"
+
+#: src/security_linux/cli.py:159 src/security_linux/daemon.py:382
+msgid "injecter la localisation (debug)"
+msgstr "inject location (debug)"
+
+#: src/security_linux/config.py:158
+#, python-brace-format
+msgid "trop de tentatives échouées, attendez {attente}s"
+msgstr "too many failed attempts, wait {attente}s"
+
+#: src/security_linux/config.py:169
+#, python-brace-format
+msgid "échec authentification admin ({nb}/{max})"
+msgstr "admin authentication failed ({nb}/{max})"
+
+#: src/security_linux/daemon.py:162 src/security_linux/daemon.py:163
+msgid "actif"
+msgstr "active"
+
+#: src/security_linux/daemon.py:162
+msgid "périphérique"
+msgstr "device"
+
+#: src/security_linux/daemon.py:163
+msgid "appareil"
+msgstr "device"
+
+#: src/security_linux/daemon.py:163
+msgid "seuil RSSI"
+msgstr "RSSI threshold"
+
+#: src/security_linux/daemon.py:164
+msgid "méthode"
+msgstr "method"
+
+#: src/security_linux/daemon.py:164
+msgid "SSID maison"
+msgstr "home SSID"
+
+#: src/security_linux/daemon.py:164
+msgid "hors-ligne sécurisé"
+msgstr "secure offline"
+
+#: src/security_linux/daemon.py:171
+#, python-brace-format
+msgid "moniteur {name} reconfiguré : {changements}"
+msgstr "monitor {name} reconfigured: {changements}"
+
+#: src/security_linux/daemon.py:182
+msgid "interrupteur manuel "
+msgstr "manual switch "
+
+#: src/security_linux/daemon.py:195
+#, python-brace-format
+msgid "réglages appliqués : {details}"
+msgstr "settings applied: {details}"
+
+#: src/security_linux/daemon.py:199
+msgid "démarrage refusé : un démon de sécurité tourne déjà"
+msgstr "start refused: a security daemon is already running"
+
+#: src/security_linux/daemon.py:200
+msgid "security-linuxd : un démon tourne déjà (voir le journal)."
+msgstr "security-linuxd: a daemon is already running (see the log)."
+
+#: src/security_linux/daemon.py:206
+msgid "activée"
+msgstr "enabled"
+
+#: src/security_linux/daemon.py:206
+msgid "coupée"
+msgstr "disabled"
+
+#: src/security_linux/daemon.py:207
+msgid "aucun appareil"
+msgstr "no device"
+
+#: src/security_linux/daemon.py:210
+#, python-brace-format
+msgid ""
+"démarrage du démon de sécurité — v{version} (mode {mode}), décision "
+"{decision}, webcam {cam} ({device}), bluetooth {bt}, localisation {loc}"
+msgstr ""
+"security daemon starting — v{version} (mode {mode}), decision {decision}, "
+"webcam {cam} ({device}), bluetooth {bt}, location {loc}"
+
+#: src/security_linux/daemon.py:225
+msgid "arrêt du démon"
+msgstr "daemon stopping"
+
+#. noqa: BLE001
+#: src/security_linux/daemon.py:257
+#, python-brace-format
+msgid "moniteur {name} : {erreur}"
+msgstr "monitor {name}: {erreur}"
+
+#: src/security_linux/daemon.py:270
+#, python-brace-format
+msgid "image locale conservée : {snap}"
+msgstr "local image saved: {snap}"
+
+#. noqa: BLE001
+#: src/security_linux/daemon.py:272
+#, python-brace-format
+msgid "capture : {erreur}"
+msgstr "capture: {erreur}"
+
+#: src/security_linux/daemon.py:299
+#, python-brace-format
+msgid "alarme sonore déclenchée ({duration}s, mode braquage)"
+msgstr "audible alarm triggered ({duration}s, holdup mode)"
+
+#. noqa: BLE001
+#: src/security_linux/daemon.py:301
+#, python-brace-format
+msgid "alarme : {erreur}"
+msgstr "alarm: {erreur}"
+
+#: src/security_linux/daemon.py:325
+#, python-brace-format
+msgid "réarmement automatique notifié ({raison})"
+msgstr "automatic re-arm notified ({raison})"
+
+#. noqa: BLE001
+#: src/security_linux/daemon.py:327
+#, python-brace-format
+msgid "notification réarmement : {erreur}"
+msgstr "re-arm notification: {erreur}"
+
+#: src/security_linux/daemon.py:351
+#, python-brace-format
+msgid "capteur {name} SIMULÉ = {valeur}"
+msgstr "sensor {name} SIMULATED = {valeur}"
+
+#: src/security_linux/daemon.py:377
+msgid "Démon de sécurité"
+msgstr "Security daemon"
+
+#: src/security_linux/daemon.py:378
+msgid "exécute une seule itération puis s'arrête"
+msgstr "run a single iteration then stop"
+
+#: src/security_linux/daemon.py:379
+msgid "mode développement temporaire (équivaut à SECURITY_LINUX_MODE=debug)"
+msgstr "temporary development mode (equivalent to SECURITY_LINUX_MODE=debug)"
+
+#: src/security_linux/engine.py:65
+#, python-brace-format
+msgid "{key} : absent depuis {secondes}s (>= {seuil}s)"
+msgstr "{key}: absent for {secondes}s (>= {seuil}s)"
+
+#: src/security_linux/engine.py:67
+#, python-brace-format
+msgid "{key} : OK / pas assez absent"
+msgstr "{key}: OK / not absent long enough"
+
+#: src/security_linux/engine.py:139
+#, python-brace-format
+msgid "verrouillage automatique déclenché ({conditions})"
+msgstr "automatic lock triggered ({conditions})"
+
+#: src/security_linux/gui/app.py:74
+#, python-brace-format
+msgid "{app} — Sécurité et verrouillage automatique"
+msgstr "{app} — Security and automatic locking"
+
+#: src/security_linux/gui/app.py:89
+msgid "Démarrer le démon"
+msgstr "Start the daemon"
+
+#: src/security_linux/gui/app.py:101 src/security_linux/gui/app.py:102
+msgid "Protection automatique"
+msgstr "Automatic protection"
+
+#. --- carte statut
+#: src/security_linux/gui/app.py:110
+msgid "État du système"
+msgstr "System status"
+
+#: src/security_linux/gui/app.py:115
+msgid "Webcam (visage)"
+msgstr "Webcam (face)"
+
+#: src/security_linux/gui/app.py:116
+msgid "Bluetooth (appareil)"
+msgstr "Bluetooth (device)"
+
+#: src/security_linux/gui/app.py:117 src/security_linux/gui/app.py:720
+msgid "Localisation"
+msgstr "Location"
+
+#: src/security_linux/gui/app.py:118
+msgid "Howdy (visage PAM)"
+msgstr "Howdy (PAM face)"
+
+#: src/security_linux/gui/app.py:119
+msgid "Silentium"
+msgstr "Silentium"
+
+#: src/security_linux/gui/app.py:120
+msgid "Dernier événement"
+msgstr "Last event"
+
+#: src/security_linux/gui/app.py:133
+msgid "Verrouiller maintenant"
+msgstr "Lock now"
+
+#: src/security_linux/gui/app.py:135
+msgid "Réglages…"
+msgstr "Settings…"
+
+#: src/security_linux/gui/app.py:137
+msgid "Enregistrer mon visage"
+msgstr "Enroll my face"
+
+#: src/security_linux/gui/app.py:139
+msgid "Journal"
+msgstr "Log"
+
+#: src/security_linux/gui/app.py:141
+msgid "Captures"
+msgstr "Captures"
+
+#: src/security_linux/gui/app.py:146
+#, python-format, python-brace-format
+msgid "{app} v{version} — analyse 100 % locale"
+msgstr "{app} v{version} — 100% local analysis"
+
+#: src/security_linux/gui/app.py:200
+msgid "Ouvrir"
+msgstr "Open"
+
+#: src/security_linux/gui/app.py:203
+msgid "Verrouiller"
+msgstr "Lock"
+
+#: src/security_linux/gui/app.py:206
+msgid "Quitter"
+msgstr "Quit"
+
+#: src/security_linux/gui/app.py:288
+msgid ""
+"<span color=\"red\" weight=\"bold\">DÉMON À L'ARRÊT — état figé. Les "
+"capteurs et le relais ne sont pas actualisés.</span>"
+msgstr ""
+"<span color=\"red\" weight=\"bold\">DAEMON STOPPED — stale state. Sensors "
+"and relay are not being refreshed.</span>"
+
+#: src/security_linux/gui/app.py:323
+msgid "Démon de sécurité démarré en arrière-plan."
+msgstr "Security daemon started in the background."
+
+#. noqa: BLE001
+#: src/security_linux/gui/app.py:325
+#, python-brace-format
+msgid "Impossible de démarrer le démon : {erreur}"
+msgstr "Unable to start the daemon: {erreur}"
+
+#: src/security_linux/gui/app.py:351 src/security_linux/gui/app.py:944
+msgid "installé"
+msgstr "installed"
+
+#: src/security_linux/gui/app.py:351 src/security_linux/gui/app.py:944
+msgid "non installé"
+msgstr "not installed"
+
+#: src/security_linux/gui/app.py:353
+msgid "visages enregistrés"
+msgstr "faces enrolled"
+
+#: src/security_linux/gui/app.py:353
+msgid "aucun visage"
+msgstr "no face"
+
+#: src/security_linux/gui/app.py:353
+msgid "droits insuffisants"
+msgstr "insufficient permissions"
+
+#: src/security_linux/gui/app.py:363
+msgid "actif — auto-lock suspendu"
+msgstr "active — auto-lock suspended"
+
+#: src/security_linux/gui/app.py:363
+msgid "inactif"
+msgstr "inactive"
+
+#: src/security_linux/gui/app.py:369
+msgid ""
+"<span color=\"orange\" weight=\"bold\">MODE DÉVELOPPEMENT (DEBUG) — config "
+"isolée, verrouillage SIMULÉ</span>"
+msgstr ""
+"<span color=\"orange\" weight=\"bold\">DEVELOPMENT MODE (DEBUG) — isolated "
+"config, SIMULATED locking</span>"
+
+#: src/security_linux/gui/app.py:392
+msgid " (réarmé : hors domicile / hors-ligne)"
+msgstr " (re-armed: away / offline)"
+
+#: src/security_linux/gui/app.py:393
+msgid " (état figé)"
+msgstr " (stale state)"
+
+#: src/security_linux/gui/app.py:394
+msgid "Protection ACTIVE"
+msgstr "Protection ACTIVE"
+
+#: src/security_linux/gui/app.py:397
+msgid "Protection désactivée (code admin)"
+msgstr "Protection disabled (admin code)"
+
+#: src/security_linux/gui/app.py:409
+msgid "Désactiver la protection"
+msgstr "Disable protection"
+
+#: src/security_linux/gui/app.py:409
+msgid "Saisissez le code administrateur pour désactiver le système."
+msgstr "Enter the administrator code to disable the system."
+
+#. Aucun code enregistré : on en crée un. S'il est posé, l'action est
+#. considérée autorisée — pas de troisième boîte de dialogue superflue.
+#: src/security_linux/gui/app.py:429
+msgid "Créer un code administrateur"
+msgstr "Create an administrator code"
+
+#: src/security_linux/gui/app.py:429
+msgid "Aucun code n'est défini. Créez-en un pour autoriser cette action."
+msgstr "No code is set. Create one to authorize this action."
+
+#: src/security_linux/gui/app.py:442
+msgid ""
+"Code administrateur incorrect (ou trop de tentatives — patientez 10 min)."
+msgstr "Incorrect administrator code (or too many attempts — wait 10 min)."
+
+#: src/security_linux/gui/app.py:449
+msgid "Premier lancement"
+msgstr "First launch"
+
+#: src/security_linux/gui/app.py:449
+msgid ""
+"Créez votre code administrateur (nécessaire pour désactiver la protection)."
+msgstr "Create your administrator code (required to disable protection)."
+
+#: src/security_linux/gui/app.py:459
+msgid "Confirmation"
+msgstr "Confirmation"
+
+#: src/security_linux/gui/app.py:459
+msgid "Confirmez le code administrateur"
+msgstr "Confirm the administrator code"
+
+#: src/security_linux/gui/app.py:467
+msgid "code administrateur défini"
+msgstr "administrator code set"
+
+#: src/security_linux/gui/app.py:469
+msgid "code administrateur non défini (annulé ou non confirmé)"
+msgstr "administrator code not set (cancelled or not confirmed)"
+
+#: src/security_linux/gui/app.py:480
+msgid "Howdy n'est pas installé sur ce système."
+msgstr "Howdy is not installed on this system."
+
+#: src/security_linux/gui/app.py:486
+msgid "Aucun terminal disponible pour l'enregistrement du visage."
+msgstr "No terminal available for face enrollment."
+
+#: src/security_linux/gui/app.py:493
+msgid "Script d'installation Howdy introuvable dans le dépôt."
+msgstr "Howdy installation script not found in the repository."
+
+#: src/security_linux/gui/app.py:500
+msgid "Installer Howdy (déverrouillage facial)"
+msgstr "Install Howdy (facial unlock)"
+
+#: src/security_linux/gui/app.py:503
+msgid ""
+"L'installation compile Howdy depuis le code source inclus dans le dépôt.\n"
+"\n"
+"- mot de passe root demandé (fenêtre pkexec / console)\n"
+"- durée : plusieurs minutes (compilation dlib)\n"
+"- nécessite une connexion Internet pour les dépendances et modèles\n"
+"\n"
+"Voulez-vous lancer l'installation ?"
+msgstr ""
+"The installation compiles Howdy from the source code included in the "
+"repository.\n"
+"\n"
+"- root password required (pkexec window / console)\n"
+"- duration: several minutes (dlib compilation)\n"
+"- requires an Internet connection for dependencies and models\n"
+"\n"
+"Do you want to start the installation?"
+
+#: src/security_linux/gui/app.py:516
+msgid "pkexec est nécessaire pour l'installation (paquet policykit-1)."
+msgstr "pkexec is required for installation (policykit-1 package)."
+
+#: src/security_linux/gui/app.py:520
+msgid ""
+"Installation lancée dans une fenêtre root. Vérifiez son avancement, puis\n"
+"réouvrez ces réglages pour activer Howdy après enregistrement du visage "
+"(bouton « Enregistrer mon visage »)."
+msgstr ""
+"Installation started in a root window. Check its progress, then\n"
+"reopen these settings to enable Howdy after enrolling your face (\"Enroll my "
+"face\" button)."
+
+#: src/security_linux/gui/app.py:524
+#, python-brace-format
+msgid "Impossible de lancer l'installation : {erreur}"
+msgstr "Unable to start the installation: {erreur}"
+
+#: src/security_linux/gui/app.py:525
+msgid ""
+"Terminal d'enregistrement ouvert (sudo howdy add). Suivez les instructions."
+msgstr "Enrollment terminal opened (sudo howdy add). Follow the instructions."
+
+#: src/security_linux/gui/app.py:540
+msgid "Aucun événement."
+msgstr "No events."
+
+#: src/security_linux/gui/app.py:541
+msgid "Journal des événements"
+msgstr "Event log"
+
+#: src/security_linux/gui/app.py:567
+#, python-brace-format
+msgid "Captures d'écran ({nombre} images)"
+msgstr "Screen captures ({nombre} images)"
+
+#: src/security_linux/gui/app.py:576
+msgid "Actualiser"
+msgstr "Refresh"
+
+#: src/security_linux/gui/app.py:580
+msgid "Supprimer toutes les captures"
+msgstr "Delete all captures"
+
+#. Label de statut
+#: src/security_linux/gui/app.py:619
+#, python-brace-format
+msgid "{nombre} capture(s) trouvée(s)"
+msgstr "{nombre} capture(s) found"
+
+#: src/security_linux/gui/app.py:641
+msgid "Supprimer toutes les captures ?"
+msgstr "Delete all captures?"
+
+#: src/security_linux/gui/app.py:644
+#, python-brace-format
+msgid ""
+"Cette action va supprimer définitivement les {nombre} captures stockées.\n"
+"\n"
+"Cette action est irréversible."
+msgstr ""
+"This will permanently delete the {nombre} stored captures.\n"
+"\n"
+"This action cannot be undone."
+
+#: src/security_linux/gui/app.py:667
+#, python-brace-format
+msgid "{nombre} capture(s) supprimée(s)."
+msgstr "{nombre} capture(s) deleted."
+
+#: src/security_linux/gui/app.py:695
+#, python-brace-format
+msgid "Erreur lors de l'ouverture de l'image : {erreur}"
+msgstr "Error opening the image: {erreur}"
+
+#: src/security_linux/gui/app.py:710
+msgid "Réglages"
+msgstr "Settings"
+
+#: src/security_linux/gui/app.py:717
+msgid "Général"
+msgstr "General"
+
+#: src/security_linux/gui/app.py:718
+msgid "Webcam"
+msgstr "Webcam"
+
+#: src/security_linux/gui/app.py:719
+msgid "Bluetooth"
+msgstr "Bluetooth"
+
+#: src/security_linux/gui/app.py:721
+msgid "Howdy"
+msgstr "Howdy"
+
+#: src/security_linux/gui/app.py:722
+msgid "Fonctions avancées"
+msgstr "Advanced features"
+
+#: src/security_linux/gui/app.py:730
+msgid "Visage ET Bluetooth (recommandé)"
+msgstr "Face AND Bluetooth (recommended)"
+
+#: src/security_linux/gui/app.py:731
+msgid "Dès qu'un seul détecteur dit 'absent'"
+msgstr "As soon as a single sensor says 'absent'"
+
+#: src/security_linux/gui/app.py:738
+msgid "Mode de décision"
+msgstr "Decision mode"
+
+#: src/security_linux/gui/app.py:739
+msgid "Absence minimale (s)"
+msgstr "Minimum absence (s)"
+
+#: src/security_linux/gui/app.py:740
+msgid "Délai de grâce avant verrouillage (s)"
+msgstr "Grace period before locking (s)"
+
+#: src/security_linux/gui/app.py:741
+msgid "Re-verrouillage si menace persistante (min)"
+msgstr "Re-lock if threat persists (min)"
+
+#: src/security_linux/gui/app.py:759
+#, python-brace-format
+msgid "{dev} — {libelle}"
+msgstr "{dev} — {libelle}"
+
+#: src/security_linux/gui/app.py:762
+#, python-brace-format
+msgid "{dev} — configuré mais non détecté"
+msgstr "{dev} — configured but not detected"
+
+#: src/security_linux/gui/app.py:764
+msgid "— aucun périphérique détecté —"
+msgstr "— no device detected —"
+
+#: src/security_linux/gui/app.py:773
+msgid "Activer la détection webcam"
+msgstr "Enable webcam detection"
+
+#: src/security_linux/gui/app.py:774
+msgid "Périphérique (aperçu en direct)"
+msgstr "Device (live preview)"
+
+#: src/security_linux/gui/app.py:775
+msgid "Analyse toutes les (s)"
+msgstr "Scan every (s)"
+
+#: src/security_linux/gui/app.py:776
+msgid "Photos de confirmation"
+msgstr "Confirmation frames"
+
+#: src/security_linux/gui/app.py:777
+msgid "Capturer une image locale lors du verrouillage"
+msgstr "Capture a local image on lock"
+
+#. --- aperçu en direct (test droits / périphérique) ---
+#: src/security_linux/gui/app.py:785
+msgid "Aperçu en direct"
+msgstr "Live preview"
+
+#: src/security_linux/gui/app.py:789
+msgid "Lancement de l'aperçu…"
+msgstr "Starting preview…"
+
+#: src/security_linux/gui/app.py:800
+msgid "Aucune donnée n'est envoyée sur internet."
+msgstr "No data is sent to the internet."
+
+#: src/security_linux/gui/app.py:807
+msgid "<span color=\"red\">Aucun périphérique vidéo détecté.</span>"
+msgstr "<span color=\"red\">No video device detected.</span>"
+
+#: src/security_linux/gui/app.py:824
+#, python-brace-format
+msgid ""
+"Impossible d'ouvrir {dev} — droits insuffisants (groupe « video ») ou "
+"périphérique occupé."
+msgstr ""
+"Unable to open {dev} — insufficient permissions (\"video\" group) or device "
+"busy."
+
+#. noqa: BLE001
+#: src/security_linux/gui/app.py:830
+#, python-brace-format
+msgid "Erreur caméra : {erreur}"
+msgstr "Camera error: {erreur}"
+
+#: src/security_linux/gui/app.py:841
+#, python-brace-format
+msgid "Aucune image de {dev} (périphérique occupé par un autre programme ?)"
+msgstr "No image from {dev} (device busy with another program?)"
+
+#: src/security_linux/gui/app.py:862
+#, python-brace-format
+msgid "OK — {libelle}"
+msgstr "OK — {libelle}"
+
+#. noqa: BLE001
+#: src/security_linux/gui/app.py:865
+#, python-brace-format
+msgid "Erreur aperçu : {erreur}"
+msgstr "Preview error: {erreur}"
+
+#: src/security_linux/gui/app.py:892
+msgid "— Choisir un appareil —"
+msgstr "— Choose a device —"
+
+#: src/security_linux/gui/app.py:900
+msgid "Activer la détection Bluetooth"
+msgstr "Enable Bluetooth detection"
+
+#: src/security_linux/gui/app.py:901
+msgid "Appareil à surveiller (téléphone/tablette/montre)"
+msgstr "Device to monitor (phone/tablet/watch)"
+
+#: src/security_linux/gui/app.py:902
+msgid "Vérification toutes les (s)"
+msgstr "Check every (s)"
+
+#: src/security_linux/gui/app.py:903
+msgid "Seuil de signal RSSI (dBm)"
+msgstr "RSSI signal threshold (dBm)"
+
+#: src/security_linux/gui/app.py:909
+msgid "Détection locale via BlueZ."
+msgstr "Local detection via BlueZ."
+
+#: src/security_linux/gui/app.py:916
+#, python-format
+msgid "Wi-Fi SSID (100 % local, recommandé)"
+msgstr "Wi-Fi SSID (100% local, recommended)"
+
+#: src/security_linux/gui/app.py:917
+msgid "GPS (GeoClue, optionnel) — repli Wi-Fi si indisponible"
+msgstr "GPS (GeoClue, optional) — falls back to Wi-Fi if unavailable"
+
+#: src/security_linux/gui/app.py:926
+msgid "Méthode de localisation"
+msgstr "Location method"
+
+#: src/security_linux/gui/app.py:927
+msgid "SSID 'maison' (séparés par des virgules)"
+msgstr "Home SSIDs (comma-separated)"
+
+#: src/security_linux/gui/app.py:928
+msgid "Sécurisé quand hors ligne (réarme auto)"
+msgstr "Secure when offline (auto re-arm)"
+
+#: src/security_linux/gui/app.py:929
+msgid "Latitude du domicile (GPS)"
+msgstr "Home latitude (GPS)"
+
+#: src/security_linux/gui/app.py:930
+msgid "Longitude du domicile (GPS)"
+msgstr "Home longitude (GPS)"
+
+#: src/security_linux/gui/app.py:931
+msgid "Rayon de détection (km)"
+msgstr "Detection radius (km)"
+
+#: src/security_linux/gui/app.py:937
+msgid "Hors domicile ou hors ligne ⇒ le système se réarme automatiquement."
+msgstr "Away from home or offline ⇒ the system re-arms automatically."
+
+#: src/security_linux/gui/app.py:946
+#, python-brace-format
+msgid "Howdy : {install} · visages : {statut}"
+msgstr "Howdy: {install} · faces: {statut}"
+
+#: src/security_linux/gui/app.py:948
+msgid "Activer le déverrouillage facial"
+msgstr "Enable facial unlock"
+
+#: src/security_linux/gui/app.py:954
+msgid "Installer Howdy (via terminal root)"
+msgstr "Install Howdy (via root terminal)"
+
+#: src/security_linux/gui/app.py:958
+msgid "Recompiler Howdy (optionnel)"
+msgstr "Rebuild Howdy (optional)"
+
+#: src/security_linux/gui/app.py:959
+msgid "Reconstruire et réinstaller Howdy depuis le code source (root)"
+msgstr "Rebuild and reinstall Howdy from source (root)"
+
+#: src/security_linux/gui/app.py:964
+msgid ""
+"Un visage doit être enregistré avant d'activer Howdy.\n"
+"Le déverrouillage v1 reste le mot de passe de session."
+msgstr ""
+"A face must be enrolled before enabling Howdy.\n"
+"V1 unlocking remains the session password."
+
+#. --- Mode Silentium ---
+#: src/security_linux/gui/app.py:976
+msgid "Mode Silentium (heures nocturnes)"
+msgstr "Silentium mode (night hours)"
+
+#: src/security_linux/gui/app.py:989
+msgid "Activer le mode Silentium"
+msgstr "Enable Silentium mode"
+
+#: src/security_linux/gui/app.py:994
+msgid "Heure de début (23 = 23h)"
+msgstr "Start hour (23 = 11 PM)"
+
+#: src/security_linux/gui/app.py:999
+msgid "Heure de fin (7 = 7h)"
+msgstr "End hour (7 = 7 AM)"
+
+#: src/security_linux/gui/app.py:1004
+msgid ""
+"Pendant ces heures, le verrouillage automatique est désactivé.\n"
+"Utile pour les nuits où vous travaillez tard."
+msgstr ""
+"During these hours, automatic locking is disabled.\n"
+"Useful for nights when you work late."
+
+#. --- Mode braquage ---
+#: src/security_linux/gui/app.py:1013
+msgid "Mode braquage (alarme)"
+msgstr "Holdup mode (alarm)"
+
+#: src/security_linux/gui/app.py:1025
+msgid "Activer l'alarme sonore"
+msgstr "Enable the audible alarm"
+
+#: src/security_linux/gui/app.py:1030
+msgid "Durée de l'alarme (secondes)"
+msgstr "Alarm duration (seconds)"
+
+#: src/security_linux/gui/app.py:1035
+msgid ""
+"Une alarme sonore retentit en cas d'intrusion détectée.\n"
+"Attention : peut être bruyant !"
+msgstr ""
+"An audible alarm sounds when an intrusion is detected.\n"
+"Warning: can be loud!"
+
+#. --- Notifications ---
+#: src/security_linux/gui/app.py:1044
+msgid "Notifications bureau"
+msgstr "Desktop notifications"
+
+#: src/security_linux/gui/app.py:1055
+msgid "Notifier lors du réarmement auto"
+msgstr "Notify on automatic re-arm"
+
+#: src/security_linux/gui/app.py:1060
+msgid ""
+"Reçoit une notification quand le système se réarme\n"
+"(hors domicile ou hors ligne)."
+msgstr ""
+"Receive a notification when the system re-arms\n"
+"(away from home or offline)."
+
+#. --- Voyant webcam ---
+#: src/security_linux/gui/app.py:1069
+msgid "Voyant webcam (confirmation de capture)"
+msgstr "Webcam LED (capture confirmation)"
+
+#: src/security_linux/gui/app.py:1080
+msgid "Afficher le voyant au-dessus des fenêtres"
+msgstr "Show the LED above all windows"
+
+#: src/security_linux/gui/app.py:1085
+msgid ""
+"Le voyant s'allume à chaque lecture d'image par l'application.\n"
+"Déplacez-le en le glissant à la souris ; sa position est mémorisée."
+msgstr ""
+"The LED lights up on every image read by the app.\n"
+"Drag it with the mouse to move it; its position is remembered."
+
+#: src/security_linux/gui/app.py:1092
+msgid "Tester"
+msgstr "Test"
+
+#: src/security_linux/gui/app.py:1094
+msgid "Remettre la position d'origine"
+msgstr "Restore default position"
+
+#: src/security_linux/gui/app.py:1165
+msgid ""
+"Howdy n'est pas installé. Impossible d'activer le déverrouillage facial."
+msgstr "Howdy is not installed. Cannot enable facial unlock."
+
+#: src/security_linux/gui/app.py:1168
+msgid ""
+"Aucun visage enregistré. Enregistrez votre visage avant d'activer Howdy."
+msgstr "No face enrolled. Enroll your face before enabling Howdy."
+
+#: src/security_linux/gui/app.py:1201
+msgid "réglages mis à jour"
+msgstr "settings updated"
+
+#: src/security_linux/gui/app.py:1281
+#, python-brace-format
+msgid "{app} : une instance est déjà en cours d'exécution."
+msgstr "{app}: an instance is already running."
+
+#: src/security_linux/lock.py:55
+#, python-brace-format
+msgid "écran verrouillé (session {session})"
+msgstr "screen locked (session {session})"
+
+#: src/security_linux/lock.py:64
+#, python-brace-format
+msgid "écran verrouillé via {commande}"
+msgstr "screen locked via {commande}"
+
+#: src/security_linux/lock.py:66
+msgid "échec du verrouillage d'écran"
+msgstr "screen locking failed"
+
+#: src/security_linux/monitors/bluetooth.py:40
+msgid "(aucun)"
+msgstr "(none)"
+
+#: src/security_linux/monitors/bluetooth.py:97
+#: src/security_linux/monitors/camera.py:144
+msgid "moniteur coupé"
+msgstr "monitor disabled"
+
+#: src/security_linux/monitors/bluetooth.py:104
+msgid "aucun appareil Bluetooth choisi dans les réglages"
+msgstr "no Bluetooth device selected in settings"
+
+#: src/security_linux/monitors/bluetooth.py:115
+#, python-brace-format
+msgid "{appareil} : connecté (RSSI {rssi} dBm)"
+msgstr "{appareil}: connected (RSSI {rssi} dBm)"
+
+#: src/security_linux/monitors/bluetooth.py:117
+#, python-brace-format
+msgid "{appareil} : RSSI {rssi} dBm"
+msgstr "{appareil}: RSSI {rssi} dBm"
+
+#: src/security_linux/monitors/bluetooth.py:121
+#, python-brace-format
+msgid " — autres connectés : {noms}"
+msgstr " — other connected: {noms}"
+
+#: src/security_linux/monitors/bluetooth.py:125
+#, python-brace-format
+msgid "{appareil} non joignable depuis {secondes}s{suffix}"
+msgstr "{appareil} unreachable for {secondes}s{suffix}"
+
+#: src/security_linux/monitors/camera.py:146
+msgid "webcam ou OpenCV indisponible"
+msgstr "webcam or OpenCV unavailable"
+
+#: src/security_linux/monitors/camera.py:162
+msgid "visage détecté"
+msgstr "face detected"
+
+#: src/security_linux/monitors/camera.py:167
+#, python-brace-format
+msgid "aucun visage depuis {secondes}s"
+msgstr "no face for {secondes}s"
+
+#: src/security_linux/monitors/location.py:95
+msgid "GPS : coordonnées domicile non définies"
+msgstr "GPS: home coordinates not set"
+
+#: src/security_linux/monitors/location.py:101
+#, python-brace-format
+msgid "GPS : dist {distance:.2f} km (rayon {rayon} km)"
+msgstr "GPS: dist {distance:.2f} km (radius {rayon} km)"
+
+#: src/security_linux/monitors/location.py:107
+msgid "aucun réseau Wi-Fi actif"
+msgstr "no active Wi-Fi network"
+
+#: src/security_linux/monitors/location.py:112
+#, python-brace-format
+msgid "Wi-Fi : {ssid} — SSID 'maison' non défini dans les réglages"
+msgstr "Wi-Fi: {ssid} — home SSID not set in settings"
+
+#: src/security_linux/monitors/location.py:115
+#, python-brace-format
+msgid "Wi-Fi : {ssid}"
+msgstr "Wi-Fi: {ssid}"
+
+#: src/security_linux/monitors/location.py:115
+msgid " (maison)"
+msgstr " (home)"
+
+#: src/security_linux/monitors/location.py:115
+msgid " (hors domicile)"
+msgstr " (away)"
+
+#: src/security_linux/monitors/location.py:122
+#: src/security_linux/monitors/location.py:134
+#: src/security_linux/monitors/location.py:136
+msgid " ; hors ligne"
+msgstr " ; offline"
+
+#: src/security_linux/monitors/location.py:134
+msgid " ; connecté"
+msgstr " ; connected"
+
+#: src/security_linux/monitors/location.py:136
+msgid " ; en ligne (hors domicile)"
+msgstr " ; online (away from home)"

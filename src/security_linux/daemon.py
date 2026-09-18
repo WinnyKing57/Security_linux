@@ -20,6 +20,7 @@ import security_linux.events as events
 import security_linux.howdy_ctrl as howdy_ctrl
 import security_linux.lock as lock
 import security_linux.runtime as runtime
+from security_linux.i18n import _
 from security_linux.engine import Engine
 from security_linux.monitors import MonitorResult
 from security_linux.monitors.bluetooth import BluetoothMonitor
@@ -158,16 +159,16 @@ class Daemon:
             ),
         }
         labels = {
-            "camera": ("actif", "périphérique"),
-            "bluetooth": ("actif", "appareil", "seuil RSSI"),
-            "location": ("méthode", "SSID maison", "hors-ligne sécurisé"),
+            "camera": (_("actif"), _("périphérique")),
+            "bluetooth": (_("actif"), _("appareil"), _("seuil RSSI")),
+            "location": (_("méthode"), _("SSID maison"), _("hors-ligne sécurisé")),
         }
         if self._prev_mon_cfg is not None:
             for name, now in keys.items():
                 prev = self._prev_mon_cfg[name]
                 if now != prev:
                     changed = [lbl for lbl, a, b in zip(labels[name], now, prev) if a != b]
-                    events.log_event("config", f"moniteur {name} reconfiguré : {', '.join(changed)}")
+                    events.log_event("config", _("moniteur {name} reconfiguré : {changements}").format(name=name, changements=", ".join(changed)))
         self._prev_mon_cfg = keys
 
     def _consume_commands(self) -> None:
@@ -178,7 +179,7 @@ class Daemon:
         if kind == "arm" and isinstance(cmd.get("value"), bool):
             self.cfg["general"]["armed"] = bool(cmd["value"])
             config.save_config(self.cfg)
-            events.log_event("arm", "interrupteur manuel " + ("ARMÉ" if cmd["value"] else "DÉSARMÉ (code admin)"))
+            events.log_event("arm", _("interrupteur manuel ") + ("ARMÉ" if cmd["value"] else "DÉSARMÉ (code admin)"))
         elif kind == "set_many" and isinstance(cmd.get("values"), dict):
             changed = False
             for dotted, value in cmd["values"].items():
@@ -191,24 +192,28 @@ class Daemon:
             if changed:
                 config.save_config(self.cfg)
                 details = ", ".join(f"{k}={v}" for k, v in cmd["values"].items())
-                events.log_event("config", f"réglages appliqués : {details}")
+                events.log_event("config", _("réglages appliqués : {details}").format(details=details))
 
     def run(self) -> None:
         if not _acquire_daemon_lock():
-            events.log_event("daemon", "démarrage refusé : un démon de sécurité tourne déjà")
-            print("security-linuxd : un démon tourne déjà (voir le journal).", file=sys.stderr)
+            events.log_event("daemon", _("démarrage refusé : un démon de sécurité tourne déjà"))
+            print(_("security-linuxd : un démon tourne déjà (voir le journal)."), file=sys.stderr)
             sys.exit(1)
         atexit.register(_release_daemon_lock)
         cam = self.cfg["camera"]
         bt = self.cfg["bluetooth"]
         loc = self.cfg["location"]
-        cam_state = "activée" if cam.get("enabled") else "coupée"
-        bt_state = bt.get("device_addr") or "aucun appareil"
+        cam_state = _("activée") if cam.get("enabled") else _("coupée")
+        bt_state = bt.get("device_addr") or _("aucun appareil")
         events.log_event(
             "daemon",
-            f"démarrage du démon de sécurité — v{__version__} (mode {runtime.mode()}), "
-            f"décision {self.cfg['general'].get('decision_mode')}, webcam {cam_state} ({cam.get('device')}), "
-            f"bluetooth {bt_state}, localisation {loc.get('method')}",
+            _("démarrage du démon de sécurité — v{version} (mode {mode}), "
+              "décision {decision}, webcam {cam} ({device}), "
+              "bluetooth {bt}, localisation {loc}").format(
+                version=__version__, mode=runtime.mode(),
+                decision=self.cfg["general"].get("decision_mode"),
+                cam=cam_state, device=cam.get("device"), bt=bt_state, loc=loc.get("method"),
+            ),
         )
         cached: dict[str, MonitorResult] = {
             "camera": MonitorResult("camera", "pending"),
@@ -217,7 +222,7 @@ class Daemon:
         }
 
         def _stop(signum, _frame):
-            events.log_event("daemon", "arrêt du démon")
+            events.log_event("daemon", _("arrêt du démon"))
             sys.exit(0)
 
         signal.signal(signal.SIGTERM, _stop)
@@ -249,7 +254,7 @@ class Daemon:
                         try:
                             cached[name] = mon.tick()
                         except Exception as exc:  # noqa: BLE001
-                            events.log_event("error", f"moniteur {name}: {exc}")
+                            events.log_event("error", _("moniteur {name} : {erreur}").format(name=name, erreur=exc))
                             cached[name] = MonitorResult(name, "unavailable", str(exc))
 
                 cached = self._apply_simulations(cached)
@@ -262,9 +267,9 @@ class Daemon:
                         try:
                             snap = self.camera.capture_snapshot("lock_event")
                             if snap:
-                                events.log_event("capture", f"image locale conservée: {snap}")
+                                events.log_event("capture", _("image locale conservée : {snap}").format(snap=snap))
                         except Exception as exc:  # noqa: BLE001
-                            events.log_event("error", f"capture: {exc}")
+                            events.log_event("error", _("capture : {erreur}").format(erreur=exc))
                 if decision.get("action") in ("lock", "relock") and not runtime.is_debug():
                     self._trigger_braquage()
                 self._maybe_notify_rearm(decision)
@@ -291,9 +296,9 @@ class Daemon:
         def _play():
             try:
                 alerts.play_alarm(duration)
-                events.log_event("alarm", f"alarme sonore déclenchée ({duration}s, mode braquage)")
+                events.log_event("alarm", _("alarme sonore déclenchée ({duration}s, mode braquage)").format(duration=duration))
             except Exception as exc:  # noqa: BLE001
-                events.log_event("error", f"alarme: {exc}")
+                events.log_event("error", _("alarme : {erreur}").format(erreur=exc))
 
         threading.Thread(target=_play, daemon=True).start()
 
@@ -317,9 +322,9 @@ class Daemon:
             reason = "hors_ligne" if offline else ("hors_domicile" if away else "manuel")
             try:
                 alerts.send_rearm_notification(reason)
-                events.log_event("notification", f"réarmement automatique notifié ({reason})")
+                events.log_event("notification", _("réarmement automatique notifié ({raison})").format(raison=reason))
             except Exception as exc:  # noqa: BLE001
-                events.log_event("error", f"notification réarmement: {exc}")
+                events.log_event("error", _("notification réarmement : {erreur}").format(erreur=exc))
         self._prev_forced = forced
 
     def _apply_simulations(self, states: dict[str, MonitorResult]) -> dict[str, MonitorResult]:
@@ -343,7 +348,7 @@ class Daemon:
                     states[name] = MonitorResult("location", "away", at_home=None, offline=True)
             else:
                 states[name] = MonitorResult(name, value, extra={"absent_elapsed_seconds": 999})
-            runtime.debug_msg(f"capteur {name} SIMULÉ = {value}")
+            runtime.debug_msg(_("capteur {name} SIMULÉ = {valeur}").format(name=name, valeur=value))
         return states
 
     def _publish(self, states: dict[str, MonitorResult], decision: dict) -> None:
@@ -369,12 +374,12 @@ class Daemon:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Démon de sécurité")
-    parser.add_argument("--one-shot", action="store_true", help="exécute une seule itération puis s'arrête")
-    parser.add_argument("--debug", action="store_true", help="mode développement temporaire (équivaut à SECURITY_LINUX_MODE=debug)")
-    parser.add_argument("--simulate-camera", choices=["present", "absent", "disabled"], help="injecter l'état webcam (debug)")
-    parser.add_argument("--simulate-bluetooth", choices=["present", "absent", "disabled"], help="injecter l'état Bluetooth (debug)")
-    parser.add_argument("--simulate-location", choices=["home", "away", "offline"], help="injecter la localisation (debug)")
+    parser = argparse.ArgumentParser(description=_("Démon de sécurité"))
+    parser.add_argument("--one-shot", action="store_true", help=_("exécute une seule itération puis s'arrête"))
+    parser.add_argument("--debug", action="store_true", help=_("mode développement temporaire (équivaut à SECURITY_LINUX_MODE=debug)"))
+    parser.add_argument("--simulate-camera", choices=["present", "absent", "disabled"], help=_("injecter l'état webcam (debug)"))
+    parser.add_argument("--simulate-bluetooth", choices=["present", "absent", "disabled"], help=_("injecter l'état Bluetooth (debug)"))
+    parser.add_argument("--simulate-location", choices=["home", "away", "offline"], help=_("injecter la localisation (debug)"))
     args = parser.parse_args()
     if args.debug:
         os.environ["SECURITY_LINUX_MODE"] = "debug"

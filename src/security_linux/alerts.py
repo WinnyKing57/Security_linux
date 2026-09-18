@@ -10,6 +10,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from security_linux.i18n import _
+
 
 def play_alarm(duration_seconds: int = 5) -> bool:
     """Joue une alarme sonore pendant duration_seconds secondes.
@@ -53,7 +55,7 @@ def play_alarm(duration_seconds: int = 5) -> bool:
     
     # Fallback: beep terminal (si disponible)
     try:
-        for _ in range(duration_seconds):
+        for _i in range(duration_seconds):
             print("\a", end="", flush=True)
             import time  # noqa: PLC0415
             time.sleep(1)
@@ -111,45 +113,45 @@ def send_notification(title: str, message: str, urgency: str = "normal") -> bool
         pass
     
     # Fallback: affichage terminal
-    print(f"[NOTIFICATION] {title}: {message}")
+    print(_("[NOTIFICATION] {titre} : {message}").format(titre=title, message=message))
     return False
 
 
 def send_rearm_notification(reason: str) -> bool:
     """Notification spécifique pour le réarmement automatique.
-    
+
     Args:
         reason: Raison du réarmement ("hors_domicile", "hors_ligne", etc.)
     """
     reasons = {
-        "hors_domicile": ("Protection réactivée", "Vous avez quitté votre domicile. Le système s'est réarmé automatiquement."),
-        "hors_ligne": ("Protection réactivée", "Réseau perdu. Le système s'est réarmé automatiquement (mode sécurisé)."),
-        "manuel": ("Protection activée", "La protection a été activée manuellement."),
+        "hors_domicile": (_("Protection réactivée"), _("Vous avez quitté votre domicile. Le système s'est réarmé automatiquement.")),
+        "hors_ligne": (_("Protection réactivée"), _("Réseau perdu. Le système s'est réarmé automatiquement (mode sécurisé).")),
+        "manuel": (_("Protection activée"), _("La protection a été activée manuellement.")),
     }
-    
+
     title, message = reasons.get(reason, (
-        "Protection réactivée",
-        f"Le système s'est réarmé automatiquement ({reason}).",
+        _("Protection réactivée"),
+        _("Le système s'est réarmé automatiquement ({raison}).").format(raison=reason),
     ))
-    
+
     return send_notification(title, message, urgency="normal")
 
 
 def send_intrusion_alert(intrusion_type: str) -> bool:
     """Alerte d'intrusion avec notification critique.
-    
+
     Args:
         intrusion_type: Type d'intrusion ("visage_absent", "bluetooth_absent", "intrusion_detectee")
     """
     alerts = {
-        "visage_absent": ("⚠️ Visage non détecté", "Aucun visage n'a été détecté devant l'écran. Vérrouillage en cours..."),
-        "bluetooth_absent": ("📱 Appareil Bluetooth absent", "Votre appareil Bluetooth n'est plus à portée. Vérrouillage en cours..."),
-        "intrusion_detectee": ("🚨 ALERTE INTRUSION", "Un mouvement ou une présence suspecte a été détectée !"),
+        "visage_absent": (_("⚠️ Visage non détecté"), _("Aucun visage n'a été détecté devant l'écran. Verrouillage en cours...")),
+        "bluetooth_absent": (_("📱 Appareil Bluetooth absent"), _("Votre appareil Bluetooth n'est plus à portée. Verrouillage en cours...")),
+        "intrusion_detectee": (_("🚨 ALERTE INTRUSION"), _("Un mouvement ou une présence suspecte a été détectée !")),
     }
-    
+
     title, message = alerts.get(intrusion_type, (
-        "⚠️ Alerte sécurité",
-        "Une anomalie de sécurité a été détectée.",
+        _("⚠️ Alerte sécurité"),
+        _("Une anomalie de sécurité a été détectée."),
     ))
-    
+
     return send_notification(title, message, urgency="critical")

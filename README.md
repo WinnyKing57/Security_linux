@@ -1,6 +1,6 @@
 # Security-Linux
 
-Verrouillage automatique d'écran et sécurité de bureau — **100 % local**, aucune donnée envoyée sur Internet. *(v0.2.1)*
+Verrouillage automatique d'écran et sécurité de bureau — **100 % local**, aucune donnée envoyée sur Internet. *(v1.0.0-beta)*
 
 ## Fonctionnalités
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import subprocess
 
+from security_linux.i18n import _
 from security_linux.monitors.base import Monitor, MonitorResult
 
 
@@ -36,7 +37,7 @@ class BluetoothMonitor(Monitor):
         for dev in self.list_known_devices():
             if dev["address"] == self._addr:
                 return dev["name"]
-        return self._addr or "(aucun)"
+        return self._addr or _("(aucun)")
 
     def _connected_names(self) -> list[str]:
         names: list[str] = []
@@ -93,14 +94,14 @@ class BluetoothMonitor(Monitor):
         import time as _time
 
         if not self.enabled():
-            return MonitorResult(self.name, "disabled", "moniteur coupé")
+            return MonitorResult(self.name, "disabled", _("moniteur coupé"))
         self._addr = (self.cfg.get("device_addr") or "").strip().lower()
         self._min_rssi = int(self.cfg.get("min_rssi", -70))
         if not self.supported():
             return MonitorResult(
                 self.name,
                 "unconfigured",
-                "aucun appareil Bluetooth choisi dans les réglages",
+                _("aucun appareil Bluetooth choisi dans les réglages"),
             )
         info = self._probe()
         connected = info["connected"] is True
@@ -111,15 +112,17 @@ class BluetoothMonitor(Monitor):
         monitored = self._device_name()
         other_connected = ", ".join(self._connected_names()) or None
         if present_now:
-            detail = f"{monitored}: connecté (RSSI {rssi} dBm)" if connected else f"{monitored}: RSSI {rssi} dBm"
+            detail = (_("{appareil} : connecté (RSSI {rssi} dBm)").format(appareil=monitored, rssi=rssi)
+                      if connected
+                      else _("{appareil} : RSSI {rssi} dBm").format(appareil=monitored, rssi=rssi))
             return MonitorResult(self.name, "present", detail, extra={"rssi": rssi, "connected": connected, "monitored_name": monitored, "other_connected": other_connected})
         elapsed = int(self.absent_elapsed_seconds)
-        extra = {"rssi": rssi, "connected": connected, "monitored_name": monitored, "other_connected": other_connected}
-        suffix = f" — autres connectés : {other_connected}" if other_connected else ""
+        extra = {"rssi": rssi, "connected": connected, "monitored_name": monitored, "other_connected": other_connected, "absent_elapsed_seconds": elapsed}
+        suffix = _(" — autres connectés : {noms}").format(noms=other_connected) if other_connected else ""
         return MonitorResult(
             self.name,
             "absent",
-            f"{monitored} non joignable depuis {elapsed}s{suffix}",
+            _("{appareil} non joignable depuis {secondes}s{suffix}").format(appareil=monitored, secondes=elapsed, suffix=suffix),
             absent_since=self.absent_since,
             extra=extra,
         )

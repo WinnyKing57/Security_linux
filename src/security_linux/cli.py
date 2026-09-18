@@ -18,6 +18,7 @@ import sys
 
 import security_linux.config as config
 import security_linux.events as events
+from security_linux.i18n import _
 
 
 def _load_or_default() -> tuple[dict, str]:
@@ -29,15 +30,15 @@ def _load_or_default() -> tuple[dict, str]:
 def cmd_status(_args) -> int:
     state = events.read_state()
     if not state:
-        print("Pas de démon actif (état inconnu).")
+        print(_("Pas de démon actif (état inconnu)."))
         return 1
     armed = state.get("armed_state", {})
-    print(f"Mode : {state.get('mode', 'production')}")
-    print(f"État machine : {state.get('machine_state')}")
-    print(f"Armé manuellement : {armed.get('manual')}")
-    print(f"Armé (forcé, hors domicile/hors-ligne) : {armed.get('forced')}")
-    print(f"Armement effectif : {armed.get('armed')}")
-    print("Moniteurs :")
+    print(_("Mode : {}").format(state.get("mode", "production")))
+    print(_("État machine : {}").format(state.get("machine_state")))
+    print(_("Armé manuellement : {}").format(armed.get("manual")))
+    print(_("Armé (forcé, hors domicile/hors-ligne) : {}").format(armed.get("forced")))
+    print(_("Armement effectif : {}").format(armed.get("armed")))
+    print(_("Moniteurs :"))
     for name, mon in state.get("monitors", {}).items():
         print(f"  {name:<10} {mon.get('status'):<16} {mon.get('detail', '')}")
     return 0
@@ -58,21 +59,21 @@ def _persist_armed(value: bool) -> int:
 
 def cmd_arm(_args) -> int:
     _persist_armed(True)
-    print("Système ARMÉ.")
+    print(_("Système ARMÉ."))
     return 0
 
 
 def cmd_disarm(_args) -> int:
     _cfg, _path = _load_or_default()
     if not config.has_admin_code(_cfg):
-        print("Aucun code admin défini. Lancez l'application graphique pour en créer un.")
+        print(_("Aucun code admin défini. Lancez l'application graphique pour en créer un."))
         return 1
-    code = getpass.getpass("Code administrateur : ")
+    code = getpass.getpass(_("Code administrateur : "))
     if not config.verify_admin_code(_cfg, code):
-        print("Code invalide.")
+        print(_("Code invalide."))
         return 1
     _persist_armed(False)
-    print("Système DÉSARMÉ.")
+    print(_("Système DÉSARMÉ."))
     return 0
 
 
@@ -85,21 +86,21 @@ def cmd_lock_now(_args) -> int:
 def cmd_set_code(_args) -> int:
     cfg, _path = _load_or_default()
     if config.has_admin_code(cfg):
-        current = getpass.getpass("Code admin actuel : ")
+        current = getpass.getpass(_("Code admin actuel : "))
         if not config.verify_admin_code(cfg, current):
-            print("Code actuel invalide.")
+            print(_("Code actuel invalide."))
             return 1
-    code = getpass.getpass("Nouveau code admin : ")
-    confirm = getpass.getpass("Confirmez : ")
+    code = getpass.getpass(_("Nouveau code admin : "))
+    confirm = getpass.getpass(_("Confirmez : "))
     if code != confirm:
-        print("Les codes ne correspondent pas.")
+        print(_("Les codes ne correspondent pas."))
         return 1
     if len(code) < 4:
-        print("Le code doit contenir au moins 4 caractères.")
+        print(_("Le code doit contenir au moins 4 caractères."))
         return 1
     config.set_admin_code(cfg, code)
     config.save_config(cfg)
-    print("Code admin mis à jour.")
+    print(_("Code admin mis à jour."))
     return 0
 
 
@@ -107,7 +108,7 @@ def cmd_list_bt(_args) -> int:
     from security_linux.monitors.bluetooth import BluetoothMonitor
 
     if not config.default_config_path().exists():
-        print("Config par défaut utilisée.")
+        print(_("Config par défaut utilisée."))
     mon = BluetoothMonitor({"enabled": True, "device_addr": ""})
     for dev in mon.list_known_devices():
         marker = "*" if dev["address"] == config.load_config()["bluetooth"]["device_addr"] else " "
@@ -142,20 +143,20 @@ def cmd_daemon(args) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="security-linux")
-    parser.add_argument("--debug", action="store_true", help="mode développement temporaire (config/état isolés, verrouillage simulé)")
+    parser.add_argument("--debug", action="store_true", help=_("mode développement temporaire (config/état isolés, verrouillage simulé)"))
     sub = parser.add_subparsers(dest="command")
-    sub.add_parser("status", help="état courant")
-    sub.add_parser("arm", help="armer")
-    sub.add_parser("disarm", help="désarmer (code admin)")
-    sub.add_parser("lock-now", help="verrouiller l'écran tout de suite")
-    sub.add_parser("set-code", help="définir/changer le code admin")
-    sub.add_parser("list-bt", help="liste des appareils Bluetooth")
-    sub.add_parser("gui", help="ouvrir l'application graphique")
-    daemon = sub.add_parser("daemon", help="démarrer le démon")
-    daemon.add_argument("--one-shot", action="store_true", help="une seule itération puis s'arrête")
-    daemon.add_argument("--simulate-camera", choices=["present", "absent", "disabled"], help="injecter l'état webcam (debug)")
-    daemon.add_argument("--simulate-bluetooth", choices=["present", "absent", "disabled"], help="injecter l'état Bluetooth (debug)")
-    daemon.add_argument("--simulate-location", choices=["home", "away", "offline"], help="injecter la localisation (debug)")
+    sub.add_parser("status", help=_("état courant"))
+    sub.add_parser("arm", help=_("armer"))
+    sub.add_parser("disarm", help=_("désarmer (code admin)"))
+    sub.add_parser("lock-now", help=_("verrouiller l'écran tout de suite"))
+    sub.add_parser("set-code", help=_("définir/changer le code admin"))
+    sub.add_parser("list-bt", help=_("liste des appareils Bluetooth"))
+    sub.add_parser("gui", help=_("ouvrir l'application graphique"))
+    daemon = sub.add_parser("daemon", help=_("démarrer le démon"))
+    daemon.add_argument("--one-shot", action="store_true", help=_("une seule itération puis s'arrête"))
+    daemon.add_argument("--simulate-camera", choices=["present", "absent", "disabled"], help=_("injecter l'état webcam (debug)"))
+    daemon.add_argument("--simulate-bluetooth", choices=["present", "absent", "disabled"], help=_("injecter l'état Bluetooth (debug)"))
+    daemon.add_argument("--simulate-location", choices=["home", "away", "offline"], help=_("injecter la localisation (debug)"))
     return parser
 
 

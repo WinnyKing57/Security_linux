@@ -17,6 +17,7 @@ env/
 # Logs and temp files
 *.log
 *.tmp
+*.po~
 
 # Editors
 .vscode/

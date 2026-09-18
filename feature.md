@@ -231,7 +231,15 @@ installation ni à des données réelles, sur n'importe quelle machine ».
 6. **Feedback code admin** — message clair en cas de code incorrect ou trop de tentatives — **TERMINÉ** `_confirm_admin()` (app.py)
 7. **Journal enrichi** — démarrage (version, mode, webcam, BT, localisation), « réglages appliqués » avec valeurs, « moniteur X reconfiguré » au changement — **TERMINÉ** daemon.py
 
+### ✅ Tâches v1.0.0-beta terminées :
+1. **Traductions (i18n)** — gettext complet : `i18n.py`, domain `security-linux`, catalogues embarqués `fr`/`en` (.po/.mo), surcharge via `SECURITY_LINUX_LANG`, script `scripts/i18n_update.sh` — **TERMINÉ** (toutes les chaînes GUI/CLI/démon enveloppées `_()`)
+2. **Bug verrouillage auto (elapsed)** — la condition « absent depuis N s » n'était jamais satisfaite en réel (`absent_elapsed_seconds` jamais fourni par les vrais moniteurs) → le verrouillage après 30 s sans visage ne se déclenchait jamais — **CORRIGÉ** (`monitors/camera.py`, `monitors/bluetooth.py` remplissent `extra`, `engine._absent_elapsed()` robuste + repli `absent_since`), tests de régression
+3. **Bug GUI webcam** — `for _ in range(...)` écrasait la fonction gettext `_()` → « 'int' object is not callable » — **CORRIGÉ** (variable `_frame`), test de régression
+4. **Voyant webcam (LED)** — petit point flottant toujours au-dessus des fenêtres, rouge à chaque lecture d'image, déplaçable à la souris, position mémorisée (`led.py`, `gui/led.py`, réglages « Fonctions avancées ») — **TERMINÉ**
+5. **Isolation des tests** — `tests/conftest.py` force le mode debug : plus aucun `pytest` ne touche la config utilisateur de production — **TERMINÉ** (corrige l'écrasement de la config/admin-code par les tests)
+6. **Désarmement admin** — rechargement de la config après vérification admin (ne récrit plus un compteur de tentatives périmé) — **CORRIGÉ** (`on_armed_toggle`)
+
 ### ❌ Tâches restantes :
-1. **Traductions (i18n)** - système complet de localisation (fichiers .po/.mo, gettext) — **À DÉFINIR** (non prioritaire)
-2. **Tests Bluetooth conditions réelles** - validation en conditions réelles d'éloignement — **À FAIRE** (nécessite test physique)
-3. **Paquets natifs .deb/.rpm (optionnel)** - désormais facilité par le script d'installation ; des paquets natifs via CI restent possibles — **À FAIRE** (optionnel)
+1. **Tests Bluetooth conditions réelles** - validation en conditions réelles d'éloignement — **À FAIRE** (nécessite test physique)
+2. **Paquets natifs .deb/.rpm (optionnel)** - désormais facilité par le script d'installation ; des paquets natifs via CI restent possibles — **À FAIRE** (optionnel)
+3. **Voyant quand la GUI est fermée** - comportement de la LED physique de la webcam (sondages du démon) à la fermeture — **À DÉFINIR**

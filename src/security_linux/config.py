@@ -11,6 +11,7 @@ from pathlib import Path
 import security_linux.events as events
 import security_linux.hashing as hashing
 import security_linux.runtime as runtime
+from security_linux.i18n import _
 
 DEFAULT_CONFIG = {
     "general": {
@@ -62,6 +63,13 @@ DEFAULT_CONFIG = {
     },
     "notifications": {
         "rearm": True,
+    },
+    "led": {
+        "enabled": False,
+        "x": None,
+        "y": None,
+        "size": 18,
+        "lit_seconds": 1.5,
     },
 }
 
@@ -147,7 +155,7 @@ def verify_admin_code(cfg: dict, code: str) -> bool:
     if len(recent) >= max_attempts:
         oldest = min(recent) if recent else 0
         wait = int(window_seconds - (now - oldest))
-        events.log_event("security", f"trop de tentatives échouées, attendez {wait}s")
+        events.log_event("security", _("trop de tentatives échouées, attendez {attente}s").format(attente=wait))
         return False
 
     if hashing.verify_code(code, cfg["admin_code"]["salt"], cfg["admin_code"]["hash"]):
@@ -158,7 +166,7 @@ def verify_admin_code(cfg: dict, code: str) -> bool:
     recent.append(now)
     cfg["admin_code"]["failed_attempts"] = recent
     save_config(cfg)
-    events.log_event("security", f"échec authentification admin ({len(recent)}/{max_attempts})")
+    events.log_event("security", _("échec authentification admin ({nb}/{max})").format(nb=len(recent), max=max_attempts))
     return False
 
 
