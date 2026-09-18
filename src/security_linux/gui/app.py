@@ -16,6 +16,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import gi
@@ -803,12 +804,36 @@ class SecuritySettingsDialog:
 
         self._preview_cap = None
         self._preview_dev = None
+        self._face_checking = False
         self._preview_src = GLib.timeout_add(150, self._preview_tick)
+
+        # --- vérification du visage (photo de référence ↔ caméra) ---
+        fr = Gtk.Frame(label=_("Vérification du visage (test de passage)"))
+        fbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.face_ref_label = Gtk.Label(label=_("enregistrement de la photo de référence…"), xalign=0)
+        self.face_ref_label.set_line_wrap(True)
+        self.face_status = Gtk.Label(label="", xalign=0)
+        self.face_status.set_line_wrap(True)
+        btns = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        btn_ref = Gtk.Button(label=_("Enregistrer la photo de référence"))
+        btn_ref.connect("clicked", lambda *_w: self._save_face_reference())
+        btn_check = Gtk.Button(label=_("Vérifier visage"))
+        btn_check.connect("clicked", lambda *_w: self._check_face_live())
+        btns.pack_start(btn_ref, False, True, 0)
+        btns.pack_start(btn_check, False, True, 0)
+        fbox.pack_start(self.face_ref_label, False, True, 0)
+        fbox.pack_start(btns, False, True, 0)
+        fbox.pack_start(self.face_status, False, True, 0)
+        fr.add(fbox)
+        v.pack_start(fr, False, True, 0)
+        self._refresh_face_ref_label()
 
         v.pack_start(Gtk.Label(label=_("Aucune donnée n'est envoyée sur internet."), xalign=0), False, True, 0)
         return v
 
     def _preview_tick(self):
+        if self._face_checking:
+            return True
         dev = self.cam_device.get_active_id() or ""
         if not dev:
             self.cam_status.set_markup(
@@ -888,6 +913,84 @@ class SecuritySettingsDialog:
             GLib.source_remove(self._preview_src)
             self._preview_src = None
         self._release_preview()
+
+    def _refresh_face_ref_label(self):
+        from security_linux import faces  # noqa: PLC0415
+
+        ref = faces.reference_path()
+        if ref.exists():
+            self.face_ref_label.set_markup(
+                _('<b>Photo de référence</b> : enregistrée ({path})').format(path=ref)
+            )
+        else:
+            self.face_ref_label.set_markup(
+                _("<b>Aucune photo de référence.</b> Enregistrez votre visage puis vérifiez en direct.")
+            )
+
+    def _save_face_reference(self):
+        from security_linux import faces  # noqa: PLC0415
+
+        dev = self.cam_device.get_active_id() or None
+        self._face_checking = True
+        self._release_preview()
+        self.face_status.set_markup(_("Enregistrement de la photo de référence… (placez votre visage devant la caméra)"))
+        threading.Thread(target=self._do_save_face_reference, args=(dev,), daemon=True).start()
+
+    def _do_save_face_reference(self, device):
+        from security_linux import faces  # noqa: PLC0415
+
+        try:
+            ok, message = faces.save_reference(device=device)
+        except Exception as exc:  # noqa: BLE001
+            ok, message = False, _("Erreur : {erreur}").format(erreur=exc)
+        GLib.idle_add(self._on_save_face_reference, ok, message)
+
+    def _on_save_face_reference(self, ok, message):
+        self._face_checking = False
+        from security_linux import faces  # noqa: PLC0415
+
+        self._refresh_face_ref_label()
+        if ok:
+            self.face_status.set_markup(f'<span color="green">{message}</span>')
+        else:
+            self.face_status.set_markup(f'<span color="red">{message}</span>')
+        return GLib.SOURCE_REMOVE
+
+    def _check_face_live(self):
+        from security_linux import faces  # noqa: PLC0415
+
+        dev = self.cam_device.get_active_id() or None
+        if not faces.reference_path().exists():
+            self.face_status.set_markup(
+                _('<span color="red">Aucune photo de référence. Enregistrez-la d\'abord.</span>')
+            )
+            return
+        self._face_checking = True
+        self._release_preview()
+        self.face_status.set_markup(_("Vérification en cours… (fixez la caméra)"))
+        threshold = 0.45
+        threading.Thread(target=self._do_check_face_live, args=(dev, threshold), daemon=True).start()
+
+    def _do_check_face_live(self, device, threshold):
+        from security_linux import faces  # noqa: PLC0415
+
+        try:
+            result = faces.verify_face(device=device, threshold=threshold)
+        except Exception as exc:  # noqa: BLE001
+            result = faces.FaceCheckResult(ok=False, message=_("Erreur : {erreur}").format(erreur=exc))
+        GLib.idle_add(self._on_check_face_live, result)
+
+    def _on_check_face_live(self, result):
+        self._face_checking = False
+        if not result.ok:
+            self.face_status.set_markup(f'<span color="red">{result.message}</span>')
+        elif result.matched:
+            self.face_status.set_markup(
+                f'<span color="green">✔ {result.message}</span>'
+            )
+        else:
+            self.face_status.set_markup(f'<span color="#c77">✘ {result.message}</span>')
+        return GLib.SOURCE_REMOVE
 
     def _bluetooth_tab(self):
         v = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)

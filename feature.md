@@ -248,6 +248,7 @@ installation ni à des données réelles, sur n'importe quelle machine ».
 6. **Démon en service `systemd --user` durci** — unité avec `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome=read-only`, `ReadWritePaths` ciblés… (`packaging/systemd/security-linuxd.service`, `scripts/install_user_service.sh`, install.sh privilégiant systemd puis repli autostart) — **TERMINÉ**
 7. **Verrouillage de repli par inactivité** — filet de sécurité indépendant des capteurs (seuil `general.idle_lock_minutes`, 0 = désactivé, mesure KDE `GetSessionIdleTime` / GNOME Mutter `GetIdletime`) — **TERMINÉ** (`idle.py`, `engine.py`, réglage GUI)
 8. **Paquets natifs .deb/.rpm** — `scripts/build_deb.sh` (dpkg-deb+fakeroot, vérifié localement) ; `packaging/security-linux.spec` + `scripts/build_rpm.sh` (CI Fedora) ; workflow GitHub Actions `package.yml` (tag `v*` → .deb/.rpm attachés à la release) — **TERMINÉ**
+9. **Vérification du visage (test de passage)** — enregistrement d'une photo de référence puis comparaison avec le visage devant la caméra (score de similarité 0..1, seuil configurable) — **TERMINÉ** (`faces.py`, GUI « Réglages → Webcam », CLI `face-save`/`face-check`)
 
 ### ❌ Tâches restantes (v1.1.0-beta et au-delà) :
 1. **Tests Bluetooth conditions réelles** — validation en conditions réelles d'éloignement — **À FAIRE** (nécessite test physique)

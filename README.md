@@ -15,6 +15,7 @@ Verrouillage automatique d'écran et sécurité de bureau — **100 % local**, a
 | **Mode braquage** | Alarme sonore en cas de verrouillage automatique (tentative d'intrusion), ou si un capteur armé disparaît brusquement (`on_tamper`). | Configurable |
 | **Notifications** | Alerte bureau quand le système se réarme automatiquement (hors domicile/ligne). | Configurable |
 | **Verrouillage par inactivité** | Repli indépendant des capteurs (KDE `GetSessionIdleTime` / GNOME Mutter), seuil en minutes, 0 = désactivé. | Configurable |
+| **Validation faciale (test)** | Enregistrez une photo de référence et vérifiez que le visage devant la caméra lui correspond (score de similarité) — pour tester le passage face à la webcam. | Local |
 | **Journal de sécurité** | Rotation auto par taille + chaîne d'intégrité SHA-256 (`verify_event_log()` détecte toute falsification). | Local |
 
 ### Règle de verrouillage
@@ -37,8 +38,11 @@ Le script **détecte automatiquement la distribution** (Debian/Ubuntu, Fedora, A
 - crée un environnement Python virtuel (`.venv` dans le dossier du dépôt) ;
 - installe les dépendances Python et le paquet local ;
 - installe la configuration initiale (`~/.config/security-linux/config.json`, 0600) ;
-- configure le démarrage automatique : **service `systemd --user` durci** (sandbox) quand disponible, sinon autostart XDG ;
+- configure le démarrage automatique : **service `systemd --user` durci** (`./scripts/install_user_service.sh`, sandbox) quand disponible, sinon autostart XDG ;
 - supprime l'ancien fichier `lock_proximity.sh` cassé.
+
+`./scripts/install_user_service.sh` est aussi utilisable **manuellement**, plus tard, pour (ré)installer l'unité
+`security-linuxd.service` dans `~/.config/systemd/user/` (il détecte le binaire du `.venv` et l'active avec `systemctl --user enable --now`).
 
 > Les paquets système (`python3-gi`, `python3-opencv`, `bluez`, `network-manager`, …) sont installés en option avec `sudo` ; s'ils manquent, l'application fonctionnera avec une fonctionnalité réduite (bluetooth/localisation indisponibles).
 
@@ -79,6 +83,12 @@ security-linux set-code
 
 # Liste les appareils Bluetooth appariés (pour les réglages)
 security-linux list-bt
+
+# Enregistre la photo de référence (visage) depuis la caméra
+security-linux face-save
+
+# Vérifie le visage devant la caméra par rapport à la photo de référence
+security-linux face-check
 ```
 
 ### Interface & démon
@@ -172,6 +182,15 @@ Filet de sécurité **indépendant des capteurs** : si la webcam et le Bluetooth
 "general": { "idle_lock_minutes": 0 }
 ```
 
+### Vérification du visage (test de passage)
+
+Dans **Réglages → Webcam**, un cadre « Vérification du visage » permet de :
+
+- **« Enregistrer la photo de référence »** : capture le visage visible et l'enregistre (`~/.local/share/security-linux/faces/reference.jpg`, 0700) ;
+- **« Vérifier visage »** : compare le visage actuellement devant la caméra à la photo de référence et affiche **Correspondance confirmée / Pas de correspondance** avec le score de similarité (corrélation normalisée 0..1, seuil 0,45).
+
+Idéal pour tester si votre visage « passe » la détection avant de dépendre du verrouillage automatique. Mêmes commandes en CLI : `security-linux face-save` et `security-linux face-check`.
+
 ### Notifications bureau
 
 Une notification est envoyée (KDE/GNOME via `notify-send`) quand le système se **réarme automatiquement** (hors domicile ou hors ligne). Désactivable dans les réglages.
@@ -212,6 +231,7 @@ src/security_linux/
 ├── lock.py             # Verrouillage d'écran (loginctl / KDE qdbus / GNOME gdbus)
 ├── idle.py             # Inactivité utilisateur (KDE GetSessionIdleTime / GNOME Mutter)
 ├── config.py           # Config JSON + code admin (PBKDF2, longueur minimale)
+├── faces.py            # Validation faciale : photo de référence ↔ caméra
 ├── events.py           # Journal chaîné + rotation +état/commandes HMAC
 ├── hashing.py          # PBKDF2-SHA256
 ├── howdy_ctrl.py       # Module dormant Howdy

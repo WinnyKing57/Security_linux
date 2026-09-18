@@ -8,6 +8,8 @@
   security-linux lock-now  → verrouille l'écran immédiatement
   security-linux set-code  → définit/chgange le code admin
   security-linux list-bt   → liste les appareils Bluetooth appariés
+  security-linux face-save → enregistre la photo de référence (visage)
+  security-linux face-check→ vérifie le visage devant la caméra (passe au test)
 """
 from __future__ import annotations
 
@@ -116,6 +118,22 @@ def cmd_list_bt(_args) -> int:
     return 0
 
 
+def cmd_face_save(args) -> int:
+    from security_linux import faces
+
+    ok, message = faces.save_reference(device=getattr(args, "device", None))
+    print(message)
+    return 0 if ok else 1
+
+
+def cmd_face_check(args) -> int:
+    from security_linux import faces
+
+    result = faces.verify_face(device=getattr(args, "device", None), threshold=getattr(args, "threshold", 0.45))
+    print(result.message)
+    return 0 if result.ok and result.matched else 1
+
+
 def cmd_gui(_args) -> int:
     from security_linux.gui.app import main as gui_main
 
@@ -151,6 +169,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("lock-now", help=_("verrouiller l'écran tout de suite"))
     sub.add_parser("set-code", help=_("définir/changer le code admin"))
     sub.add_parser("list-bt", help=_("liste des appareils Bluetooth"))
+    face_save = sub.add_parser("face-save", help=_("enregistrer la photo de référence"))
+    face_save.add_argument("--device", default=None, help=_("périphérique vidéo (défaut : /dev/video0)"))
+    face_check = sub.add_parser("face-check", help=_("vérifier le visage devant la caméra"))
+    face_check.add_argument("--device", default=None, help=_("périphérique vidéo (défaut : /dev/video0)"))
+    face_check.add_argument("--threshold", type=float, default=0.45, help=_("seuil de correspondance (0..1)"))
     sub.add_parser("gui", help=_("ouvrir l'application graphique"))
     daemon = sub.add_parser("daemon", help=_("démarrer le démon"))
     daemon.add_argument("--one-shot", action="store_true", help=_("une seule itération puis s'arrête"))
@@ -163,7 +186,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if getattr(args, "debug", False) and args.command in ("set-code", "disarm", "arm", "list-bt"):
+    if getattr(args, "debug", False) and args.command in ("set-code", "disarm", "arm", "list-bt", "face-save", "face-check"):
         os.environ["SECURITY_LINUX_MODE"] = "debug"
     if args.command is None:
         if args.debug:
@@ -176,6 +199,8 @@ def main(argv: list[str] | None = None) -> int:
         "lock-now": cmd_lock_now,
         "set-code": cmd_set_code,
         "list-bt": cmd_list_bt,
+        "face-save": cmd_face_save,
+        "face-check": cmd_face_check,
         "gui": cmd_gui,
         "daemon": cmd_daemon,
     }
