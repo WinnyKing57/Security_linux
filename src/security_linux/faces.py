@@ -22,6 +22,14 @@ _CASCADE = "haarcascade_frontalface_default.xml"
 _DEFAULT_THRESHOLD = 0.45
 
 
+def default_threshold() -> float:
+    """Seuil de correspondance configuré (Réglages → Webcam), sinon 0.45."""
+    try:
+        return float(config.load_config().get("faces", {}).get("threshold", _DEFAULT_THRESHOLD))
+    except (TypeError, ValueError):
+        return _DEFAULT_THRESHOLD
+
+
 def _cv2():
     import cv2  # noqa: PLC0415
 

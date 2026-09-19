@@ -18,7 +18,9 @@ import security_linux.alerts as alerts
 import security_linux.config as config
 import security_linux.events as events
 import security_linux.howdy_ctrl as howdy_ctrl
+import security_linux.led as led
 import security_linux.lock as lock
+import security_linux.report as report
 import security_linux.runtime as runtime
 from security_linux.i18n import _
 from security_linux.engine import Engine
@@ -131,6 +133,8 @@ class Daemon:
         self._prev_forced: bool | None = None
         # Config précédente des moniteurs (journal des changements de réglages)
         self._prev_mon_cfg: dict | None = None
+        # Derniers états des capteurs (pour le rapport d'intrusion consolidé)
+        self._last_states: dict[str, MonitorResult] = {}
 
     def _is_due(self, name: str, mon) -> bool:
         now = time.time()
@@ -258,9 +262,11 @@ class Daemon:
                             cached[name] = MonitorResult(name, "unavailable", str(exc))
 
                 cached = self._apply_simulations(cached)
+                self._last_states = cached
 
                 decision = self.engine.tick(cached, self.cfg["general"]["armed"])
                 cam_simulated = runtime.is_debug() and runtime.sim_camera() is not None
+                snap = None
                 if decision.get("action") in ("lock", "relock") and not cam_simulated:
                     cam_cfg = self.cfg["camera"]
                     if cam_cfg.get("capture_on_lock", True) and cam_cfg.get("enabled", True):
@@ -271,9 +277,9 @@ class Daemon:
                         except Exception as exc:  # noqa: BLE001
                             events.log_event("error", _("capture : {erreur}").format(erreur=exc))
                 if decision.get("action") in ("lock", "relock") and not runtime.is_debug():
-                    self._trigger_braquage()
+                    self._trigger_braquage(self._last_states, capture_path=snap, armed_state=decision.get("armed", {}))
                 if decision.get("tamper") and not runtime.is_debug():
-                    self._handle_tamper()
+                    self._handle_tamper(self._last_states, armed_state=decision.get("armed", {}))
                 self._maybe_notify_rearm(decision)
                 self._publish(cached, decision)
                 if self.one_shot:
@@ -283,8 +289,13 @@ class Daemon:
                 events.log_event("error", f"boucle principale: {exc}")
             time.sleep(_WATCH)
 
-    def _trigger_braquage(self) -> None:
-        """Mode braquage : alarme sonore sur verrouillage automatique.
+    def _trigger_braquage(
+        self,
+        states: dict[str, MonitorResult],
+        capture_path: str | None = None,
+        armed_state: dict | None = None,
+    ) -> None:
+        """Mode braquage : alarme sonore + rapport d'intrusion consolidé.
 
         L'alarme joue dans un thread détaché pour ne pas bloquer la boucle
         de surveillance (sinon le démon ne répondrait plus pendant toute la
@@ -294,6 +305,13 @@ class Daemon:
         if not brq.get("enabled", False):
             return
         duration = int(brq.get("alarm_duration", 5))
+        report.build_report(
+            "braquage",
+            self.cfg,
+            states,
+            capture_path=capture_path,
+            machine_state=machine_state(armed_state or {}, runtime.mode()),
+        )
 
         def _play():
             try:
@@ -304,17 +322,23 @@ class Daemon:
 
         threading.Thread(target=_play, daemon=True).start()
 
-    def _handle_tamper(self) -> None:
-        """Disparition d'un capteur armé : notification critique + alarme
-        (si le mode braquage est actif et ``on_tamper`` activé)."""
+    def _handle_tamper(self, states: dict[str, MonitorResult], armed_state: dict | None = None) -> None:
+        """Disparition d'un capteur armé : notification critique + rapport +
+        alarme (si le mode braquage est actif et ``on_tamper`` activé)."""
         brq = self.cfg.get("braquage", {})
+        report.build_report(
+            "tamper",
+            self.cfg,
+            states,
+            machine_state=machine_state(armed_state or {}, runtime.mode()),
+        )
         try:
             alerts.send_intrusion_alert("intrusion_detectee")
         except Exception as exc:  # noqa: BLE001
             events.log_event("error", _("alerte intrusion : {erreur}").format(erreur=exc))
         if brq.get("enabled", False) and brq.get("on_tamper", True):
             events.log_event("tamper", _("alarme déclenchée suite à la disparition d'un capteur armé"))
-            self._trigger_braquage()
+            self._trigger_braquage(states, armed_state=armed_state)
 
     def _maybe_notify_rearm(self, decision: dict) -> None:
         """Notification bureau quand le système se réarme automatiquement."""
@@ -368,6 +392,9 @@ class Daemon:
     def _publish(self, states: dict[str, MonitorResult], decision: dict) -> None:
         recent = events.read_events(limit=1)
         mode = runtime.mode()
+        from datetime import datetime, timezone  # noqa: PLC0415
+
+        led_last = led.last_blink()
         payload = {
             "mode": mode,
             "machine_state": machine_state(decision.get("armed", {}), mode),
@@ -378,6 +405,8 @@ class Daemon:
             "time_to_lock": decision.get("time_to_lock", 0.0),
             "silentium_active": decision.get("silentium_active", False),
             "monitors": {name: mon.to_dict() for name, mon in states.items()},
+            "led_active": led_last is not None and (datetime.now(timezone.utc) - led_last).total_seconds() < 60,
+            "led_last_ts": led_last.isoformat() if led_last is not None else None,
             "howdy": {
                 "installed": howdy_ctrl.is_installed(),
                 "models_status": howdy_ctrl.models_status(),

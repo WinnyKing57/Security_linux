@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import copy
 
+import pytest
+
 from security_linux import hashing
 from security_linux.config import DEFAULT_CONFIG, load_config, save_config, set_admin_code, verify_admin_code
 from security_linux.engine import Engine, effective_armed
@@ -26,6 +28,61 @@ def test_hashing_roundtrip():
     h = hashing.hash_code("mon-code-123", salt)
     assert hashing.verify_code("mon-code-123", salt, h)
     assert not hashing.verify_code("autre-code", salt, h)
+
+
+def test_argon2id_roundtrip_if_available(monkeypatch):
+    if not hashing.argon2_available():
+        pytest.skip("argon2-cffi absent")
+    encoded = hashing.argon2id_hash("mon-code-secret")
+    assert hashing.argon2id_verify("mon-code-secret", encoded)
+    assert not hashing.argon2id_verify("autre-code", encoded)
+    assert hashing.verify_code("mon-code-secret", "", encoded, "argon2id")
+    assert not hashing.verify_code("autre-code", "", encoded, "argon2id")
+
+
+def test_verify_code_rejects_argon2id_without_lib(monkeypatch):
+    monkeypatch.setattr(hashing, "_argon2", lambda: None)
+    assert hashing.argon2id_verify("x", "n'importe-quoi") is False
+
+
+def test_verify_code_unknown_algorithm_falls_back_pbkdf2():
+    salt = hashing.generate_salt()
+    h = hashing.hash_code("code", salt)
+    assert hashing.verify_code("code", salt, h, algorithm="inconnu")
+
+
+def test_admin_code_stores_pbkdf2_without_argon2(monkeypatch):
+    monkeypatch.setattr(hashing, "argon2_available", lambda: False)
+    cfg = copy.deepcopy(DEFAULT_CONFIG)
+    set_admin_code(cfg, "123456")
+    assert cfg["admin_code"]["alg"] == "pbkdf2"
+    assert cfg["admin_code"]["salt"]
+    assert verify_admin_code(cfg, "123456")
+    assert not verify_admin_code(cfg, "999999")
+
+
+def test_admin_code_uses_argon2id_when_available(monkeypatch):
+    if not hashing.argon2_available():
+        pytest.skip("argon2-cffi absent")
+    cfg = copy.deepcopy(DEFAULT_CONFIG)
+    set_admin_code(cfg, "123456")
+    assert cfg["admin_code"]["alg"] == "argon2id"
+    assert verify_admin_code(cfg, "123456")
+
+
+def test_migration_pbkdf2_to_argon2id(monkeypatch):
+    if not hashing.argon2_available():
+        pytest.skip("argon2-cffi absent")
+    orig = hashing.argon2_available
+    monkeypatch.setattr(hashing, "argon2_available", lambda: False)
+    cfg = copy.deepcopy(DEFAULT_CONFIG)
+    set_admin_code(cfg, "123456")
+    assert cfg["admin_code"]["alg"] == "pbkdf2"
+    monkeypatch.setattr(hashing, "argon2_available", orig)
+    # La vérification réussie migre le hash PBKDF2 vers Argon2id.
+    assert verify_admin_code(cfg, "123456")
+    assert cfg["admin_code"]["alg"] == "argon2id"
+    assert verify_admin_code(cfg, "123456")
 
 
 def test_config_admin_code():

@@ -50,9 +50,13 @@ DEFAULT_CONFIG = {
         "enabled": False,
         "require_face_before_enable": True,
     },
+    "faces": {
+        "threshold": 0.45,
+    },
     "admin_code": {
         "salt": "",
         "hash": "",
+        "alg": "pbkdf2",
         "failed_attempts": [],
     },
     "silentium": {
@@ -132,7 +136,7 @@ def save_config(cfg: dict, path: Path | None = None) -> None:
 
 
 def has_admin_code(cfg: dict) -> bool:
-    return bool(cfg["admin_code"]["hash"]) and bool(cfg["admin_code"]["salt"])
+    return bool(cfg["admin_code"]["hash"])
 
 
 def valid_admin_code(code: str) -> bool:
@@ -141,12 +145,19 @@ def valid_admin_code(code: str) -> bool:
 
 
 def set_admin_code(cfg: dict, code: str) -> None:
+    """Enregistre le code admin : Argon2id si disponible, sinon PBKDF2."""
     if not valid_admin_code(code):
         raise ValueError(
             _("le code admin doit contenir au moins {n} caractères").format(n=MIN_ADMIN_CODE_LENGTH)
         )
-    cfg["admin_code"]["salt"] = hashing.generate_salt()
-    cfg["admin_code"]["hash"] = hashing.hash_code(code, cfg["admin_code"]["salt"])
+    if hashing.argon2_available():
+        cfg["admin_code"]["alg"] = "argon2id"
+        cfg["admin_code"]["salt"] = ""
+        cfg["admin_code"]["hash"] = hashing.argon2id_hash(code)
+    else:
+        cfg["admin_code"]["alg"] = "pbkdf2"
+        cfg["admin_code"]["salt"] = hashing.generate_salt()
+        cfg["admin_code"]["hash"] = hashing.hash_code(code, cfg["admin_code"]["salt"])
 
 
 def verify_admin_code(cfg: dict, code: str) -> bool:
@@ -171,7 +182,18 @@ def verify_admin_code(cfg: dict, code: str) -> bool:
         events.log_event("security", _("trop de tentatives échouées, attendez {attente}s").format(attente=wait))
         return False
 
-    if hashing.verify_code(code, cfg["admin_code"]["salt"], cfg["admin_code"]["hash"]):
+    if hashing.verify_code(
+        code,
+        cfg["admin_code"]["salt"],
+        cfg["admin_code"]["hash"],
+        cfg["admin_code"].get("alg", "pbkdf2"),
+    ):
+        # Migration auto : un ancien hash PBKDF2 est ré-haché en Argon2id
+        # dès qu'Argon2id est disponible (sans intervention de l'utilisateur).
+        if cfg["admin_code"].get("alg", "pbkdf2") == "pbkdf2" and hashing.argon2_available():
+            cfg["admin_code"]["alg"] = "argon2id"
+            cfg["admin_code"]["salt"] = ""
+            cfg["admin_code"]["hash"] = hashing.argon2id_hash(code)
         cfg["admin_code"]["failed_attempts"] = recent
         save_config(cfg)
         return True

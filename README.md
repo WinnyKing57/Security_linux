@@ -206,11 +206,12 @@ Une notification est envoyée (KDE/GNOME via `notify-send`) quand le système se
 | Détection visage | OpenCV Haar cascade, 100 % local, aucune donnée envoyée |
 | Détection Bluetooth | BlueZ local (dbus/bluetoothctl), aucun réseau |
 | Localisation | nmcli (SSID) — 100 % local, pas de geolocalisation externe |
-| Code admin | PBKDF2-SHA256 (200 000 itérations), stocké dans `~/.config/security-linux/config.json` (0600) — anti-bruteforce : 3 échecs / 10 min, longueur minimale **6 caractères** |
+| Code admin | **Argon2id** (argon2-cffi, paramètres OWASP 2023) dès qu'installé, repli PBKDF2-SHA256 (200 000 itérations) ; migration automatique PBKDF2→Argon2id à la première connexion réussie ; stockée dans `~/.config/security-linux/config.json` (0600) — anti-bruteforce : 3 échecs / 10 min, longueur minimale **6 caractères** |
 | Commandes | Canal `command.json` **authentifié HMAC-SHA256** (clé de session 0600) — toute commande mal signée est rejetée et journalisée |
 | Tamper (anti-évasion) | Un capteur armé qui disparaît → événement `tamper` + notification critique + alarme optionnelle (`braquage.on_tamper`) |
 | Configuration | Fichier config.json en 0600, répertoire de données en 0700 |
 | Journal | `~/.local/share/security-linux/events.log` (0600), rotation auto par taille + **chaîne d'intégrité SHA-256** (`verify_event_log()`) |
+| Rapports d'intrusion | à chaque braquage/tamper : capture + snapshot config/moniteurs + dernière minute de log dans `reports/intrusion_*.json` (0700/0600), **aucun secret** |
 
 ### Modèle de menace et limites (v1.1.0-beta)
 
@@ -224,16 +225,17 @@ Le modèle de menace cible un **compte utilisateur non compromis** : toute perso
 
 ```
 src/security_linux/
-├── cli.py              # CLI (security-linux, security-linuxd)
+├── cli.py              # CLI (security-linux, security-linuxd, bluetooth-test)
 ├── daemon.py           # Démon de surveillance (boucle 1s, alarme tamper)
 ├── engine.py           # Moteur de décision (AND/OR, grâce, réarmement, tamper, inactivité)
 ├── alerts.py           # Alarme sonore (braquage/tamper) + notifications bureau
 ├── lock.py             # Verrouillage d'écran (loginctl / KDE qdbus / GNOME gdbus)
 ├── idle.py             # Inactivité utilisateur (KDE GetSessionIdleTime / GNOME Mutter)
-├── config.py           # Config JSON + code admin (PBKDF2, longueur minimale)
+├── config.py           # Config JSON + code admin (Argon2id/PBKDF2, longueur minimale)
 ├── faces.py            # Validation faciale : photo de référence ↔ caméra
+├── report.py           # Rapports d'intrusion consolidés (braquage / tamper)
 ├── events.py           # Journal chaîné + rotation +état/commandes HMAC
-├── hashing.py          # PBKDF2-SHA256
+├── hashing.py          # Argon2id (optionnel) + PBKDF2-SHA256
 ├── howdy_ctrl.py       # Module dormant Howdy
 ├── runtime.py          # Modes production / debug (débogage temporaire)
 ├── monitors/

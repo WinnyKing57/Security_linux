@@ -250,11 +250,16 @@ installation ni à des données réelles, sur n'importe quelle machine ».
 8. **Paquets natifs .deb/.rpm** — `scripts/build_deb.sh` (dpkg-deb+fakeroot, vérifié localement) ; `packaging/security-linux.spec` + `scripts/build_rpm.sh` (CI Fedora) ; workflow GitHub Actions `package.yml` (tag `v*` → .deb/.rpm attachés à la release) — **TERMINÉ**
 9. **Vérification du visage (test de passage)** — enregistrement d'une photo de référence puis comparaison avec le visage devant la caméra (score de similarité 0..1, seuil configurable) — **TERMINÉ** (`faces.py`, GUI « Réglages → Webcam », CLI `face-save`/`face-check`)
 
+### ✅ Tâches v1.1.0-beta terminées (passage sur le matériel réel) :
+1. **Compte rendu d'intrusion consolidé** — à chaque déclenchement du mode braquage ou tampering : capture + état machine + snapshot config/moniteurs + dernière minute de journal dans un rapport horodaté unique `data_dir()/reports/intrusion_*.json` (répertoire 0700, fichier 0600, **aucun secret** admin_code/SSID) — **TERMINÉ** (`report.py`, `daemon._trigger_braquage`/`_handle_tamper`, GUI bouton « Rapports »)
+2. **Argon2id pour le code admin** — Argon2id (argon2-cffi, paramètres OWASP 2023) par défaut quand le module est installé, repli PBKDF2-SHA256 200k en stdlib ; **migration automatique** d'un hash PBKDF2 existant à la première vérification réussie ; extra `pip install security-linux[security]` — **TERMINÉ** (`hashing.py`, `config.py`, champ `admin_code.alg`)
+3. **Commandes CLI `bluetooth-test`** — échantillonnage RSSI/connectivité sur le matériel réel (durée/intervalle paramétrables, écriture CSV `--out`) et synthèse : %, RSSI min/moy/max, **seuil `min_rssi` conseillé** pour la surveillance réelle — **TERMINÉ** (`cli.py`)
+4. **État du voyant webcam publié dans state.json** — le démon publie `led_active` / `led_last_ts` (dernier clignotement < 60 s), affiché par la GUI (ligne « Voyant webcam ») et `security-linux status` — **TERMINÉ** (`daemon._publish`)
+5. **Corrections GUI d'utilisation** — message double trompeur lors de l'installation de Howdy supprimé ; interrupteur Howdy verrouillé « dormant en v1 » ; seuil de correspondance du visage réglable dans « Réglages → Webcam » (0.1–0.9, persisté) ; compteur exact de captures à la suppression ; crash au redémarrage sans icône de tray corrigé — **TERMINÉ** (`app.py`, `faces.py`, `config.py`)
+
 ### ❌ Tâches restantes (v1.1.0-beta et au-delà) :
-1. **Tests Bluetooth conditions réelles** — validation en conditions réelles d'éloignement — **À FAIRE** (nécessite test physique)
+1. **Tests Bluetooth conditions réelles** — validation en conditions réelles d'éloignement — **À FAIRE** (nécessite test physique ; commande `bluetooth-test` disponible pour relever les RSSI réels)
 2. **2FA réel une fois Howdy activé** — exiger visage **ET** code/mot de passe pour désarmer (aujourd'hui Howdy est dormant ; à l'activation il remplacerait le PAM, pas un facteur additionnel) — **À FAIRE** (nécessite Howdy actif)
-3. **Compte rendu d'intrusion consolidé** — regrouper capture + log + snapshot BT/localisation dans un rapport horodaté unique à chaque déclenchement du mode braquage — **À FAIRE**
-4. **Export/rotation chiffrée des journaux et captures** — consultation a posteriori en cas d'incident réel — **À FAIRE**
-5. **Verrou physique / capteur de proximité complémentaire** (couvercle webcam, dépend du matériel) — **À ÉTUDIER**
-6. **Argon2id** pour le code admin (plus résistant au craquage GPU que PBKDF2-SHA256 200k) — **À ÉTUDIER**
-3. **Voyant quand la GUI est fermée** - comportement de la LED physique de la webcam (sondages du démon) à la fermeture — **À DÉFINIR**
+3. **Export/rotation chiffrée des journaux et captures** — consultation a posteriori en cas d'incident réel — **À FAIRE**
+4. **Verrou physique / capteur de proximité complémentaire** (couvercle webcam, dépend du matériel) — **À ÉTUDIER**
+5. **Voyant quand la GUI est fermée** — comportement de la LED physique de la webcam (sondages du démon) à la fermeture — **À DÉFINIR** (l'état « clignote/à l'arrêt » est déjà publié par le démon dans `state.json` : `led_active` / `led_last_ts`)

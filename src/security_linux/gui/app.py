@@ -104,7 +104,6 @@ class SecurityLinuxApp:
         armed_row.pack_start(lbl, False, True, 0)
         armed_row.pack_end(self.armed_switch, False, True, 0)
 
-        self.labels["arm_eff"] = Gtk.Label(label="…")
         self.labels["arm_status"] = Gtk.Label(label="")
 
         # --- carte statut
@@ -117,6 +116,7 @@ class SecurityLinuxApp:
             (_("Bluetooth (appareil)"), "bluetooth"),
             (_("Localisation"), "location"),
             (_("Howdy (visage PAM)"), "howdy"),
+            (_("Voyant webcam"), "led"),
             (_("Silentium"), "silentium"),
             (_("Dernier événement"), "last_event"),
         ]
@@ -141,7 +141,9 @@ class SecurityLinuxApp:
         b_events.connect("clicked", lambda *_x: self.show_events())
         b_captures = Gtk.Button(label=_("Captures"))
         b_captures.connect("clicked", lambda *_x: self.show_captures())
-        for b in (b_lock, b_settings, b_howdy, b_events, b_captures):
+        b_reports = Gtk.Button(label=_("Rapports"))
+        b_reports.connect("clicked", lambda *_x: self.show_reports())
+        for b in (b_lock, b_settings, b_howdy, b_events, b_captures, b_reports):
             btn_row.pack_start(b, False, True, 0)
 
         footer = Gtk.Label(label=_("{app} v{version} — analyse 100 % locale").format(app=APP_NAME, version=__version__), xalign=0)
@@ -178,7 +180,8 @@ class SecurityLinuxApp:
 
     def on_delete_event(self, *_args):
         # se ferme en barre système et non quit
-        self.tray.set_visible(True)
+        if self.tray is not None:
+            self.tray.set_visible(True)
         self.window.hide()
         return True
 
@@ -363,6 +366,12 @@ class SecurityLinuxApp:
         silentium = state.get("silentium_active", False)
         setl("silentium", _("actif — auto-lock suspendu") if silentium else _("inactif"), "orange" if silentium else "black")
 
+        if state.get("led_last_ts") is not None:
+            led_state = _("clignote — captures récentes") if state.get("led_active") else _("à l'arrêt")
+            setl("led", led_state, "green" if state.get("led_active") else "black")
+        else:
+            setl("led", _("jamais clignoté"), "black")
+
         banner = self.labels.get("mode_banner")
         is_debug = state.get("mode") == "debug" or runtime.is_debug()
         if banner:
@@ -529,7 +538,6 @@ class SecurityLinuxApp:
                         "(bouton « Enregistrer mon visage »)."))
         except OSError as exc:
             self._msg(_("Impossible de lancer l'installation : {erreur}").format(erreur=exc), error=True)
-        self._msg(_("Terminal d'enregistrement ouvert (sudo howdy add). Suivez les instructions."))
 
     def _msg(self, text, error=False):
         dlg = Gtk.MessageDialog(
@@ -556,6 +564,68 @@ class SecurityLinuxApp:
         win.add(sw)
         win.show_all()
 
+    def show_reports(self):
+        """Visionneuse des rapports d'intrusion consolidés (mode braquage / tamper)."""
+        import json  # noqa: PLC0415
+
+        from security_linux import report  # noqa: PLC0415
+
+        items = report.list_reports()
+        win = Gtk.Window(title=_("Rapports d'intrusion ({nombre})").format(nombre=len(items)))
+        win.set_default_size(760, 480)
+        win.set_border_width(10)
+
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        if not items:
+            vbox.pack_start(Gtk.Label(label=_("Aucun rapport d'intrusion pour le moment."), xalign=0), False, True, 0)
+            win.add(vbox)
+            win.show_all()
+            return
+
+        # Liste des rapports (gauche) + vue du contenu (droite)
+        hpaned = Gtk.Paned()
+        lst = Gtk.ListBox()
+        lst.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        buf = Gtk.TextBuffer()
+        tv = Gtk.TextView(buffer=buf)
+        tv.set_editable(False)
+        tv.set_wrap_mode(Gtk.WrapMode.WORD)
+        sw = Gtk.ScrolledWindow()
+        sw.add(lst)
+        hpaned.pack1(sw, resize=False, shrink=False)
+        sw2 = Gtk.ScrolledWindow()
+        sw2.add(tv)
+        hpaned.pack2(sw2, resize=True, shrink=False)
+        vbox.pack_start(hpaned, True, True, 0)
+
+        for item in items:
+            row = Gtk.ListBoxRow()
+            lbl = Gtk.Label(
+                label="{}  [{}]  {}".format(
+                    item.get("ts", ""), item.get("kind", "?"), item.get("capture") or "—"
+                ),
+                xalign=0,
+            )
+            row.add(lbl)
+            row.set_data("item", item)
+            lst.add(row)
+
+        def _show(row):
+            if row is None:
+                return
+            payload = report.read_report(row.get_data("item")["path"]) or {}
+            buf.set_text(json.dumps(payload, indent=2, ensure_ascii=False))
+
+        lst.connect("row-selected", lambda lst2, row: _show(row))
+        lst.select_row(lst.get_row_at_index(0))
+
+        btn_refresh = Gtk.Button(label=_("Actualiser"))
+        btn_refresh.connect("clicked", lambda *_x: (win.destroy(), self.show_reports()))
+        vbox.pack_start(btn_refresh, False, True, 0)
+
+        win.add(vbox)
+        win.show_all()
+
     def show_captures(self):
         """Affiche la visionneuse des captures avec option de suppression."""
         import security_linux.config as cfg_module  # noqa: PLC0415
@@ -571,7 +641,8 @@ class SecurityLinuxApp:
                 reverse=True
             )
 
-        win = Gtk.Window(title=_("Captures d'écran ({nombre} images)").format(nombre=len(capture_files)))
+        capt_total = len(capture_files)
+        win = Gtk.Window(title=_("Captures d'écran ({nombre} images)").format(nombre=capt_total))
         win.set_default_size(800, 600)
         win.set_border_width(10)
 
@@ -586,7 +657,7 @@ class SecurityLinuxApp:
 
         btn_delete_all = Gtk.Button(label=_("Supprimer toutes les captures"))
         btn_delete_all.get_style_context().add_class("destructive-action")
-        btn_delete_all.connect("clicked", lambda *_x: self._delete_all_captures(win, grid, status_label))
+        btn_delete_all.connect("clicked", lambda *_x: self._delete_all_captures(win, grid, status_label, capt_total))
         toolbar.pack_end(btn_delete_all, False, True, 0)
 
         vbox.pack_start(toolbar, False, True, 0)
@@ -623,7 +694,7 @@ class SecurityLinuxApp:
         vbox.pack_start(sw, True, True, 0)
 
         # Label de statut
-        status_label = Gtk.Label(label=_("{nombre} capture(s) trouvée(s)").format(nombre=len(capture_files)))
+        status_label = Gtk.Label(label=_("{nombre} capture(s) trouvée(s)").format(nombre=capt_total))
         vbox.pack_start(status_label, False, True, 0)
 
         win.add(vbox)
@@ -634,7 +705,7 @@ class SecurityLinuxApp:
         win.destroy()
         self.show_captures()
 
-    def _delete_all_captures(self, win, grid, status_label):
+    def _delete_all_captures(self, win, grid, status_label, total):
         """Supprime toutes les captures après confirmation."""
         import security_linux.config as cfg_module  # noqa: PLC0415
 
@@ -649,7 +720,7 @@ class SecurityLinuxApp:
         )
         confirm_dlg.format_secondary_text(
             _("Cette action va supprimer définitivement les {nombre} captures stockées.\n\n"
-              "Cette action est irréversible.").format(nombre=grid.get_children().__len__())
+              "Cette action est irréversible.").format(nombre=total)
         )
         resp = confirm_dlg.run()
         confirm_dlg.destroy()
@@ -823,6 +894,11 @@ class SecuritySettingsDialog:
         btns.pack_start(btn_check, False, True, 0)
         fbox.pack_start(self.face_ref_label, False, True, 0)
         fbox.pack_start(btns, False, True, 0)
+        self.face_threshold = self._spin(self.cfg.get("faces", {}).get("threshold", 0.45), 0.1, 0.9, 0.05)
+        thr_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        thr_row.pack_start(Gtk.Label(label=_("Seuil de correspondance (0..1)"), xalign=0), True, True, 0)
+        thr_row.pack_end(self.face_threshold, False, True, 0)
+        fbox.pack_start(thr_row, False, True, 0)
         fbox.pack_start(self.face_status, False, True, 0)
         fr.add(fbox)
         v.pack_start(fr, False, True, 0)
@@ -968,7 +1044,7 @@ class SecuritySettingsDialog:
         self._face_checking = True
         self._release_preview()
         self.face_status.set_markup(_("Vérification en cours… (fixez la caméra)"))
-        threshold = 0.45
+        threshold = float(self.face_threshold.get_value())
         threading.Thread(target=self._do_check_face_live, args=(dev, threshold), daemon=True).start()
 
     def _do_check_face_live(self, device, threshold):
@@ -1051,7 +1127,14 @@ class SecuritySettingsDialog:
     def _howdy_tab(self):
         v = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         h = self.cfg["howdy"]
+        # Howdy est dormant en v1 : l'interrupteur est purement informatif et
+        # ne peut pas être basculé (aucun code ne consomme howdy.enabled).
         self.howdy_enabled = Gtk.Switch(active=bool(h["enabled"]))
+        self.howdy_enabled.set_sensitive(False)
+        self.howdy_enabled.set_tooltip_text(
+            _("Désactivé en v1 : le déverrouillage d'écran reste le mot de passe de session. "
+              "L'activation du déverrouillage facial est prévue en v2 (2FA).")
+        )
         installed = _("installé") if howdy_ctrl.is_installed() else _("non installé")
         status = howdy_ctrl.models_status()
         state_label = Gtk.Label(label=_("Howdy : {install} · visages : {statut}").format(install=installed, statut=status))
@@ -1073,7 +1156,8 @@ class SecuritySettingsDialog:
 
         v.pack_start(
             Gtk.Label(label=_("Un visage doit être enregistré avant d'activer Howdy.\n"
-                              "Le déverrouillage v1 reste le mot de passe de session."),
+                              "Le déverrouillage v1 reste le mot de passe de session ; "
+                              "l'interrupteur est inactif tant que le 2FA n'est pas implémenté (v2)."),
                       xalign=0),
             False, True, 0,
         )
@@ -1260,6 +1344,9 @@ class SecuritySettingsDialog:
         c["absent_confirmations"] = int(self.cam_confirm.get_value())
         c["capture_on_lock"] = self.cam_capture.get_active()
 
+        fc = self.cfg.setdefault("faces", {})
+        fc["threshold"] = float(self.face_threshold.get_value())
+
         b = self.cfg["bluetooth"]
         b["enabled"] = self.bt_enabled.get_active()
         b["device_addr"] = (self.bt_dev.get_active_id() or "").lower()
@@ -1277,15 +1364,9 @@ class SecuritySettingsDialog:
             l["home_lat"] = l["home_lon"] = 0.0
         l["radius_km"] = float(self.loc_rad.get_value())
 
-        h = self.cfg["howdy"]
-        want = self.howdy_enabled.get_active()
-        if want and not howdy_ctrl.is_installed():
-            self.app._msg(_("Howdy n'est pas installé. Impossible d'activer le déverrouillage facial."), error=True)
-            want = False
-        if want and howdy_ctrl.models_status() != "ok":
-            self.app._msg(_("Aucun visage enregistré. Enregistrez votre visage avant d'activer Howdy."), error=True)
-            want = False
-        h["enabled"] = want
+        # Note : howdy.enabled n'est volontairement pas persisté en v1 — Howdy
+        # est dormant et aucun composant ne lit ce champ. L'activation réelle
+        # (2FA visage + code) sera implémentée en v2.
 
         # Général
         self.cfg["general"]["idle_lock_minutes"] = int(self.idle_lock.get_value())

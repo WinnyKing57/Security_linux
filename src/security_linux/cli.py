@@ -17,6 +17,7 @@ import argparse
 import getpass
 import os
 import sys
+import time
 
 import security_linux.config as config
 import security_linux.events as events
@@ -43,6 +44,9 @@ def cmd_status(_args) -> int:
     print(_("Moniteurs :"))
     for name, mon in state.get("monitors", {}).items():
         print(f"  {name:<10} {mon.get('status'):<16} {mon.get('detail', '')}")
+    if state.get("led_last_ts") is not None:
+        led = _("ALLUMÉ (captures récentes)") if state.get("led_active") else _("éteint")
+        print(_("Voyant webcam : {} (dernier clignotement {})").format(led, state.get("led_last_ts")))
     return 0
 
 
@@ -118,6 +122,108 @@ def cmd_list_bt(_args) -> int:
     return 0
 
 
+def _bt_sample(mon) -> dict:
+    """Un échantillon Bluetooth (ts, connected, rssi)."""
+    from datetime import datetime  # noqa: PLC0415
+
+    info = mon._probe()
+    return {
+        "ts": datetime.now().strftime("%H:%M:%S"),
+        "connected": info["connected"] is True,
+        "rssi": info["rssi"],
+    }
+
+
+def _bt_summarize(samples: list[dict]) -> dict:
+    """Synthèse d'une série d'échantillons + seuil RSSI recommandé."""
+    total = len(samples)
+    connected = sum(1 for s in samples if s["connected"])
+    rssi = [s["rssi"] for s in samples if s["rssi"] is not None]
+    summary = {
+        "total": total,
+        "connected": connected,
+        "connected_pct": (100.0 * connected / total) if total else 0.0,
+        "rssi_count": len(rssi),
+        "rssi_min": min(rssi) if rssi else None,
+        "rssi_avg": round(sum(rssi) / len(rssi), 1) if rssi else None,
+        "rssi_max": max(rssi) if rssi else None,
+        "recommended_threshold": None,
+    }
+    # Le seuil conseillé repose sur les niveaux observés "connecté" (ou tous
+    # les échantillons si l'appareil n'a jamais été vu connecté), avec une marge
+    # de 8 dBm contre les faux négatifs.
+    present = [s["rssi"] for s in samples if s["connected"] and s["rssi"] is not None]
+    base = present or rssi
+    if base:
+        summary["recommended_threshold"] = min(-30, max(-100, round(sum(base) / len(base) - 8)))
+    return summary
+
+
+def _bt_write_csv(path: str, samples: list[dict]) -> None:
+    import csv  # noqa: PLC0415
+
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["ts", "connected", "rssi"])
+        for sample in samples:
+            writer.writerow([sample["ts"], sample["connected"], sample["rssi"]])
+
+
+def cmd_bluetooth_test(args) -> int:
+    from security_linux.monitors.bluetooth import BluetoothMonitor  # noqa: PLC0415
+
+    cfg = config.load_config()
+    addr = (cfg["bluetooth"].get("device_addr") or "").strip().lower()
+    if not addr:
+        print(_("Aucun appareil Bluetooth configuré (Réglages → Bluetooth)."))
+        return 1
+    duration = max(1, int(getattr(args, "duration", 120)))
+    interval = max(1, int(getattr(args, "interval", 5)))
+    out = getattr(args, "out", None)
+
+    mon = BluetoothMonitor({"enabled": True, "device_addr": addr, "min_rssi": -100})
+    print(
+        _("Test de présence Bluetooth — {appareil} — {duration} s, échantillon toutes les {interval} s").format(
+            appareil=mon._device_name(), duration=duration, interval=interval
+        )
+    )
+    deadline = time.monotonic() + duration
+    samples: list[dict] = []
+    while time.monotonic() < deadline:
+        sample = _bt_sample(mon)
+        samples.append(sample)
+        conn = _("connecté") if sample["connected"] else _("absent")
+        rssi = sample["rssi"] if sample["rssi"] is not None else "—"
+        print(f"{sample['ts']}  {conn:<10} RSSI {rssi}")
+        time.sleep(interval)
+
+    summary = _bt_summarize(samples)
+    if out:
+        _bt_write_csv(out, samples)
+    print(_("— Synthèse —"))
+    print(_("  échantillons     : {total}").format(total=summary["total"]))
+    print(_("  connecté         : {connected}/{total} ({pct:.0f}%)").format(
+        connected=summary["connected"], total=summary["total"], pct=summary["connected_pct"]))
+    if summary["rssi_count"]:
+        print(_("  RSSI min/moy/max : {min}/{avg}/{max} dBm").format(
+            min=summary["rssi_min"], avg=summary["rssi_avg"], max=summary["rssi_max"]))
+    if summary["recommended_threshold"] is not None:
+        print(_("  seuil RSSI conseillé : {seuil} dBm (réglage min_rssi)").format(seuil=summary["recommended_threshold"]))
+    else:
+        print(_("  appareil jamais vu connecté : seuil par défaut -70 dBm conseillé"))
+    if out:
+        print(_("  échantillons enregistrés : {out}").format(out=out))
+
+    events.log_event(
+        "bluetooth-test",
+        _("test Bluetooth terminé : {connected}/{total} connectés, RSSI min/moy/max {min}/{avg}/{max}").format(
+            connected=summary["connected"], total=summary["total"],
+            min=summary["rssi_min"] if summary["rssi_min"] is not None else "?", avg=summary["rssi_avg"], max=summary["rssi_max"] if summary["rssi_max"] is not None else "?"),
+        samples=len(samples),
+    )
+    return 0
+
+
 def cmd_face_save(args) -> int:
     from security_linux import faces
 
@@ -129,7 +235,10 @@ def cmd_face_save(args) -> int:
 def cmd_face_check(args) -> int:
     from security_linux import faces
 
-    result = faces.verify_face(device=getattr(args, "device", None), threshold=getattr(args, "threshold", 0.45))
+    threshold = getattr(args, "threshold", None)
+    if threshold is None:
+        threshold = faces.default_threshold()
+    result = faces.verify_face(device=getattr(args, "device", None), threshold=threshold)
     print(result.message)
     return 0 if result.ok and result.matched else 1
 
@@ -169,11 +278,15 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("lock-now", help=_("verrouiller l'écran tout de suite"))
     sub.add_parser("set-code", help=_("définir/changer le code admin"))
     sub.add_parser("list-bt", help=_("liste des appareils Bluetooth"))
+    bt_test = sub.add_parser("bluetooth-test", help=_("test de présence Bluetooth (échantillonnage RSSI)"))
+    bt_test.add_argument("--duration", type=int, default=120, help=_("durée du test en secondes (défaut : 120)"))
+    bt_test.add_argument("--interval", type=int, default=5, help=_("intervalle d'échantillonnage en secondes (défaut : 5)"))
+    bt_test.add_argument("--out", default=None, help=_("fichier CSV de sortie (optionnel)"))
     face_save = sub.add_parser("face-save", help=_("enregistrer la photo de référence"))
     face_save.add_argument("--device", default=None, help=_("périphérique vidéo (défaut : /dev/video0)"))
     face_check = sub.add_parser("face-check", help=_("vérifier le visage devant la caméra"))
     face_check.add_argument("--device", default=None, help=_("périphérique vidéo (défaut : /dev/video0)"))
-    face_check.add_argument("--threshold", type=float, default=0.45, help=_("seuil de correspondance (0..1)"))
+    face_check.add_argument("--threshold", type=float, default=None, help=_("seuil de correspondance 0..1 (défaut : réglage configuré, 0.45)"))
     sub.add_parser("gui", help=_("ouvrir l'application graphique"))
     daemon = sub.add_parser("daemon", help=_("démarrer le démon"))
     daemon.add_argument("--one-shot", action="store_true", help=_("une seule itération puis s'arrête"))
@@ -199,6 +312,7 @@ def main(argv: list[str] | None = None) -> int:
         "lock-now": cmd_lock_now,
         "set-code": cmd_set_code,
         "list-bt": cmd_list_bt,
+        "bluetooth-test": cmd_bluetooth_test,
         "face-save": cmd_face_save,
         "face-check": cmd_face_check,
         "gui": cmd_gui,
