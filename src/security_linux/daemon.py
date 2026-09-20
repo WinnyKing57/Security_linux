@@ -12,6 +12,7 @@ import signal
 import sys
 import threading
 import time
+import traceback
 from pathlib import Path
 
 import security_linux.alerts as alerts
@@ -23,7 +24,7 @@ import security_linux.lock as lock
 import security_linux.report as report
 import security_linux.runtime as runtime
 from security_linux.i18n import _
-from security_linux.engine import Engine
+from security_linux.engine import Engine, effective_armed
 from security_linux.monitors import MonitorResult
 from security_linux.monitors.bluetooth import BluetoothMonitor
 from security_linux.monitors.camera import CameraMonitor
@@ -143,6 +144,53 @@ class Daemon:
         self._schedules[name] = now + mon.poll_seconds()
         return True
 
+    def _poll_monitors(self, cached: dict[str, MonitorResult]) -> dict[str, MonitorResult]:
+        """Sonde les capteurs selon leur échéancier.
+
+        Vie privée : la webcam n'est JAMAIS lue quand le système n'est pas
+        armé (pas d'ouverture de /dev/video*, pas de clignotement du voyant).
+        Le Bluetooth et la localisation restent surveillés (réarmement
+        automatique hors domicile / hors ligne).
+        """
+        scraps = {
+            "camera": runtime.sim_camera(),
+            "bluetooth": runtime.sim_bluetooth(),
+            "location": runtime.sim_location(),
+        }
+        # La localisation est sondée en premier : l'armement effectif de ce
+        # cycle (réarmement forcé hors domicile) est connu avant la webcam.
+        for name, mon in (
+            ("location", self.location),
+            ("camera", self.camera),
+            ("bluetooth", self.bluetooth),
+        ):
+            if runtime.is_debug() and scraps[name]:
+                continue  # capteur simulé : pas d'accès au matériel
+            if name != "location" and not mon.enabled():
+                cached[name] = MonitorResult(name, "disabled")
+                continue
+            if name == "camera":
+                loc_now = cached.get("location") or self._last_states.get("location")
+                armed_now = effective_armed(
+                    self.cfg["general"]["armed"],
+                    loc_now,
+                    self.cfg["location"].get("secure_when_offline", True),
+                )["armed"]
+                if not armed_now:
+                    cached[name] = MonitorResult(name, "disabled", _("coupée — système désarmé"))
+                    continue
+            if self._is_due(name, mon):
+                try:
+                    cached[name] = mon.tick()
+                except Exception as exc:  # noqa: BLE001
+                    events.log_event(
+                        "error",
+                        _("moniteur {name} : {erreur}").format(name=name, erreur=exc)
+                        + "\n" + traceback.format_exc(limit=8).rstrip(),
+                    )
+                    cached[name] = MonitorResult(name, "unavailable", str(exc))
+        return cached
+
     def _refresh_monitor_configs(self) -> None:
         """Reprise de la config sur disque à chaque cycle (réglages à chaud)."""
         self.engine.cfg = self.cfg
@@ -239,28 +287,7 @@ class Daemon:
                 # après consommation : les réglages 'set_many' sont repris par
                 # les moniteurs dès le cycle courant (immédiateté des changements)
                 self._refresh_monitor_configs()
-                for name, mon in (
-                    ("camera", self.camera),
-                    ("bluetooth", self.bluetooth),
-                    ("location", self.location),
-                ):
-                    scraps = {
-                        "camera": runtime.sim_camera(),
-                        "bluetooth": runtime.sim_bluetooth(),
-                        "location": runtime.sim_location(),
-                    }
-                    if runtime.is_debug() and scraps[name]:
-                        continue  # capteur simulé : pas d'accès au matériel
-                    if name != "location" and not mon.enabled():
-                        cached[name] = MonitorResult(name, "disabled")
-                        continue
-                    if self._is_due(name, mon):
-                        try:
-                            cached[name] = mon.tick()
-                        except Exception as exc:  # noqa: BLE001
-                            events.log_event("error", _("moniteur {name} : {erreur}").format(name=name, erreur=exc))
-                            cached[name] = MonitorResult(name, "unavailable", str(exc))
-
+                cached = self._poll_monitors(cached)
                 cached = self._apply_simulations(cached)
                 self._last_states = cached
 
@@ -286,7 +313,7 @@ class Daemon:
                     runtime.debug_msg(f"one-shot terminé : {decision.get('armed', {})}")
                     return
             except Exception as exc:  # noqa: BLE001
-                events.log_event("error", f"boucle principale: {exc}")
+                events.log_event("error", f"boucle principale: {exc}\n{traceback.format_exc(limit=12).rstrip()}")
             time.sleep(_WATCH)
 
     def _trigger_braquage(

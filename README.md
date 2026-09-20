@@ -68,6 +68,10 @@ security-linux
 # Lance le démon (démarre aussi via autostart KDE)
 security-linuxd
 
+# Gère le démarrage automatique au logon
+security-linux autostart           # état actuel
+security-linux autostart on|off    # active / désactive
+
 # Donne l'état courant (captures en arrière-plan)
 security-linux status
 
@@ -96,6 +100,8 @@ security-linux face-check
 - **Instance unique** : le démon et l'interface sont chacun protégés par un verrou (`flock`) — impossible de lancer deux démons en parallèle (double verrouillage évité).
 - **État figé détecté** : si le démon est à l'arrêt, l'interface affiche une bannière rouge **« DÉMON À L'ARRÊT »** avec un bouton **« Démarrer le démon »** (l'état `state.json` serait périmé).
 - **Interrupteur fiable** : la position de l'interrupteur reflète la configuration persistée (votre intention), pas un état figé — désarmer fonctionne même si le démon est arrêté.
+- **Démarrage au logon** : interrupteur « Démarrer au démarrage de session » dans Réglages → Fonctions avancées (ou `security-linux autostart on|off`) — géré via le service `systemd --user` si installé, sinon par l'entrée autostart XDG.
+- **Vie privée** : quand le système est **désarmé**, la webcam n'est **jamais** lue (pas d'ouverture de `/dev/video*`, voyant éteint) ; le sondage reprend automatiquement dès l'armement (manuel ou forcé hors domicile/hors ligne).
 - **Webcam partagée** : le démon libère la webcam entre deux sondages — l'aperçu « Réglages → Webcam » fonctionne même démon actif.
 - **Code admin** : erreur affichée clairement en cas de code incorrect ou de trop de tentatives (anti-bruteforce : 3 échecs / 10 min).
 
@@ -261,7 +267,7 @@ src/security_linux/
 L'application est conçue pour fonctionner sur n'importe quelle machine Linux, sans aucune donnée personnelle codée en dur :
 
 - **Aucune donnée privée** : pas de compte, pas de téléchargement, pas de MAC/SSID/nom d'appareil dans le code ou les documents ; toute l'identification (appareil Bluetooth, SSID maison, visage virtuel Howdy) est faite localement par l'utilisateur via l'application.
-- **Webcam** : auto-détection `/dev/video*` si le device configuré n'existe pas.
+- **Webcam** : auto-détection `/dev/video*` si le device configuré n'existe pas. Par respect de la vie privée, la webcam n'est plus lue quand le système est désarmé (voyant éteint) — les aperçus et tests de visage (actions explicites) restent bien sûr disponibles.
 - **Bluetooth** : l'utilisateur choisit son appareil parmi les appareils appariés lors du premier réglage (aucun appareil imposé).
 - **Localisation** : fonctionne avec NetworkManager (`nmcli`) ; repli possible via `iwgetid`.
 - **Verrouillage d'écran** : `loginctl` (standard), compatible KDE Plasma et GNOME ; repli `qdbus` (KDE) et `xdg-screensaver`.

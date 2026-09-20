@@ -8,8 +8,10 @@
   security-linux lock-now  → verrouille l'écran immédiatement
   security-linux set-code  → définit/chgange le code admin
   security-linux list-bt   → liste les appareils Bluetooth appariés
-  security-linux face-save → enregistre la photo de référence (visage)
-  security-linux face-check→ vérifie le visage devant la caméra (passe au test)
+security-linux face-save → enregistre la photo de référence (visage)
+   security-linux face-check→ vérifie le visage devant la caméra (passe au test)
+   security-linux autostart → état du démarrage automatique au logon
+   security-linux autostart on|off → l'activer/désactiver
 """
 from __future__ import annotations
 
@@ -243,6 +245,25 @@ def cmd_face_check(args) -> int:
     return 0 if result.ok and result.matched else 1
 
 
+def cmd_autostart(args) -> int:
+    from security_linux import autostart
+
+    state = getattr(args, "state", None)
+    if state == "on":
+        mechanism = autostart.set_enabled(True)
+        print(_("Démarrage au logon activé ({mecanisme}).").format(mecanisme=mechanism))
+        return 0
+    if state == "off":
+        mechanism = autostart.set_enabled(False)
+        print(_("Démarrage au logon désactivé ({mecanisme}).").format(mecanisme=mechanism))
+        return 0
+    print(_("Démarrage au logon : {etat} (mécanisme {mecanisme})").format(
+        etat=_("actif") if autostart.is_enabled() else _("inactif"),
+        mecanisme=autostart.mechanism(),
+    ))
+    return 0
+
+
 def cmd_gui(_args) -> int:
     from security_linux.gui.app import main as gui_main
 
@@ -287,6 +308,8 @@ def build_parser() -> argparse.ArgumentParser:
     face_check = sub.add_parser("face-check", help=_("vérifier le visage devant la caméra"))
     face_check.add_argument("--device", default=None, help=_("périphérique vidéo (défaut : /dev/video0)"))
     face_check.add_argument("--threshold", type=float, default=None, help=_("seuil de correspondance 0..1 (défaut : réglage configuré, 0.45)"))
+    autostart = sub.add_parser("autostart", help=_("gérer le démarrage automatique au logon"))
+    autostart.add_argument("state", nargs="?", choices=["on", "off"], help=_("on : activer, off : désactiver"))
     sub.add_parser("gui", help=_("ouvrir l'application graphique"))
     daemon = sub.add_parser("daemon", help=_("démarrer le démon"))
     daemon.add_argument("--one-shot", action="store_true", help=_("une seule itération puis s'arrête"))
@@ -315,6 +338,7 @@ def main(argv: list[str] | None = None) -> int:
         "bluetooth-test": cmd_bluetooth_test,
         "face-save": cmd_face_save,
         "face-check": cmd_face_check,
+        "autostart": cmd_autostart,
         "gui": cmd_gui,
         "daemon": cmd_daemon,
     }

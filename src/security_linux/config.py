@@ -23,6 +23,7 @@ DEFAULT_CONFIG = {
         "auto_lock_repeat_minutes": 3,
         "min_absent_seconds": 20,
         "idle_lock_minutes": 0,
+        "autostart": True,
     },
     "camera": {
         "enabled": True,

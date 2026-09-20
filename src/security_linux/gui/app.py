@@ -1267,6 +1267,32 @@ class SecuritySettingsDialog:
         notif_frame.add(notif_box)
         v.pack_start(notif_frame, False, True, 0)
 
+        # --- Démarrage au logon ---
+        autostart_frame = Gtk.Frame(label=_("Démarrage au logon"))
+        autostart_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        autostart_box.set_margin_top(8)
+        autostart_box.set_margin_bottom(8)
+        autostart_box.set_margin_start(8)
+        autostart_box.set_margin_end(8)
+
+        import security_linux.autostart as autostart_mod  # noqa: PLC0415
+
+        self.autostart_on_login = Gtk.Switch(active=autostart_mod.is_enabled())
+
+        arow1 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        arow1.pack_start(Gtk.Label(label=_("Démarrer au démarrage de session"), xalign=0), True, True, 0)
+        arow1.pack_end(self.autostart_on_login, False, True, 0)
+        autostart_box.pack_start(arow1, False, True, 0)
+
+        autostart_box.pack_start(
+            Gtk.Label(label=_("Le démon se lance automatiquement à chaque ouverture de session.\n"
+                             "Géré via le service systemd utilisateur, sinon par l'entrée autostart XDG."),
+                      xalign=0),
+            False, True, 0,
+        )
+        autostart_frame.add(autostart_box)
+        v.pack_start(autostart_frame, False, True, 0)
+
         # --- Voyant webcam ---
         led_frame = Gtk.Frame(label=_("Voyant webcam (confirmation de capture)"))
         led_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -1370,6 +1396,7 @@ class SecuritySettingsDialog:
 
         # Général
         self.cfg["general"]["idle_lock_minutes"] = int(self.idle_lock.get_value())
+        self.cfg["general"]["autostart"] = self.autostart_on_login.get_active()
 
         # Fonctions avancées
         s = self.cfg.setdefault("silentium", {})
@@ -1389,6 +1416,12 @@ class SecuritySettingsDialog:
         l["enabled"] = self.led_enabled.get_active()
 
         config.save_config(self.cfg)
+        try:
+            import security_linux.autostart as autostart_mod  # noqa: PLC0415
+
+            autostart_mod.set_enabled(self.autostart_on_login.get_active())
+        except Exception as exc:  # noqa: BLE001
+            events.log_event("error", _("autostart : {erreur}").format(erreur=exc))
         self.app.refresh_led()
         # applique à chaud les réglages au démon
         values = {

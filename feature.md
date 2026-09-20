@@ -257,9 +257,15 @@ installation ni à des données réelles, sur n'importe quelle machine ».
 4. **État du voyant webcam publié dans state.json** — le démon publie `led_active` / `led_last_ts` (dernier clignotement < 60 s), affiché par la GUI (ligne « Voyant webcam ») et `security-linux status` — **TERMINÉ** (`daemon._publish`)
 5. **Corrections GUI d'utilisation** — message double trompeur lors de l'installation de Howdy supprimé ; interrupteur Howdy verrouillé « dormant en v1 » ; seuil de correspondance du visage réglable dans « Réglages → Webcam » (0.1–0.9, persisté) ; compteur exact de captures à la suppression ; crash au redémarrage sans icône de tray corrigé — **TERMINÉ** (`app.py`, `faces.py`, `config.py`)
 
+### ✅ Corrections du 20/09 (vie privée & diagnostic) :
+1. **Webcam coupée quand DÉSARMÉ** — le démon ne lit plus la webcam tant que le système n'est pas armé (pas d'ouverture de `/dev/video*`, voyant éteint) ; le Bluetooth et la localisation restent surveillés (réarmement automatique) — `daemon.py` `_poll_monitors()` + `effective_armed()`
+2. **Interrupteur « Démarrer au démarrage de session »** — GUI (Réglages → Fonctions avancées) + CLI `security-linux autostart on|off` ; géré via le service `systemd --user` quand installé, sinon par l'entrée autostart XDG — nouveau module `autostart.py`
+3. **Traceback complète dans events.log** — les erreurs « boucle principale » et « moniteur X » journalisent désormais la stack complète (diagnostic du crash « str object is not callable ») — `daemon.py`
+
 ### ❌ Tâches restantes (v1.1.0-beta et au-delà) :
 1. **Tests Bluetooth conditions réelles** — validation en conditions réelles d'éloignement — **À FAIRE** (nécessite test physique ; commande `bluetooth-test` disponible pour relever les RSSI réels)
 2. **2FA réel une fois Howdy activé** — exiger visage **ET** code/mot de passe pour désarmer (aujourd'hui Howdy est dormant ; à l'activation il remplacerait le PAM, pas un facteur additionnel) — **À FAIRE** (nécessite Howdy actif)
 3. **Export/rotation chiffrée des journaux et captures** — consultation a posteriori en cas d'incident réel — **À FAIRE**
 4. **Verrou physique / capteur de proximité complémentaire** (couvercle webcam, dépend du matériel) — **À ÉTUDIER**
-5. **Voyant quand la GUI est fermée** — comportement de la LED physique de la webcam (sondages du démon) à la fermeture — **À DÉFINIR** (l'état « clignote/à l'arrêt » est déjà publié par le démon dans `state.json` : `led_active` / `led_last_ts`)
+5. **Voyant quand la GUI est fermée** — **RÉSOLU (vie privée)** : le démon ne sonde plus jamais la webcam quand le système est désarmé → LED physique éteinte ; en état armé, l'état `led_active` / `led_last_ts` est déjà publié dans `state.json`
+6. **Crash « boucle principale : 'str' object is not callable »** (20/09, erreur répétée chaque cycle pendant l'armement) — **À DIAGNOSTIQUER** : la stack complète est désormais journalisée ; reproduire en ré-armant pour corriger la cause exacte
