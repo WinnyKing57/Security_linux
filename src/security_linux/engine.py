@@ -127,6 +127,22 @@ class Engine:
                 pass
         return 0.0
 
+    def _call_lock_fn(self, now: float) -> bool:
+        """Appelle le verrouilleur SANS jamais casser la boucle ni se bloquer.
+
+        Une erreur du verrouilleur doit être journalisée, pas propagée : sinon
+        ``_last_lock_ts`` et ``_pending_since`` ne sont jamais mis à jour et le
+        moteur re-déclenche un verrouillage à CHAQUE cycle (spam de verrouillage
+        constaté quand le verrouillage d'écran plantait en production).
+        """
+        try:
+            return bool(self._lock_fn())
+        except Exception as exc:  # noqa: BLE001
+            events.log_event("error", _("verrouillage : {erreur}").format(erreur=exc))
+            self._last_lock_ts = now
+            self._pending_since = None
+            return False
+
     def tick(self, states: dict[str, MonitorResult], manual_armed: bool) -> dict:
         gen = self.cfg["general"]
         grace = float(gen.get("lock_grace_seconds", 10))
@@ -161,7 +177,7 @@ class Engine:
             elapsed = now - self._pending_since
             if elapsed >= grace:
                 if self._last_lock_ts is None or (now - self._last_lock_ts) > repeat_min:
-                    ok = self._lock_fn()
+                    ok = self._call_lock_fn(now)
                     self._last_lock_ts = now
                     self._pending_since = None
                     decision["action"] = "lock" if ok else "lock_failed"
@@ -179,7 +195,7 @@ class Engine:
             idle_sec = idle.idle_seconds()
             if idle_sec is not None and idle_sec >= idle_minutes * 60:
                 if self._last_lock_ts is None or (now - self._last_lock_ts) > repeat_min:
-                    ok = self._lock_fn()
+                    ok = self._call_lock_fn(now)
                     self._last_lock_ts = now
                     decision["action"] = "lock" if ok else "lock_failed"
                     events.log_event(
@@ -193,6 +209,6 @@ class Engine:
             # si l'utilisateur déverrouille alors que la menace persiste, re-verrouiller
             if self._last_lock_ts is not None and (now - self._last_lock_ts) > repeat_min:
                 decision["action"] = "relock"
-                self._lock_fn()
+                self._call_lock_fn(now)
                 self._last_lock_ts = now
         return decision

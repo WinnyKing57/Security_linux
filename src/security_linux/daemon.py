@@ -19,6 +19,7 @@ import security_linux.alerts as alerts
 import security_linux.config as config
 import security_linux.events as events
 import security_linux.howdy_ctrl as howdy_ctrl
+import security_linux.i18n as _i18n
 import security_linux.led as led
 import security_linux.lock as lock
 import security_linux.report as report
@@ -313,7 +314,18 @@ class Daemon:
                     runtime.debug_msg(f"one-shot terminé : {decision.get('armed', {})}")
                     return
             except Exception as exc:  # noqa: BLE001
-                events.log_event("error", f"boucle principale: {exc}\n{traceback.format_exc(limit=12).rstrip()}")
+                # Sonde runtime : identifie quel symbole est devenu str (bug
+                # « 'str' object is not callable » sur _() dans lock.lock_screen).
+                probes = ", ".join(
+                    f"{mod.__name__}.{name}={getattr(mod, name, '<absent>')!r}"
+                    for mod, name in (
+                        (lock, "_"),
+                        (lock, "_t"),
+                        (events, "log_event"),
+                        (_i18n, "_"),
+                    )
+                )
+                events.log_event("error", f"boucle principale: {exc}\n{traceback.format_exc(limit=12).rstrip()}\nprobe: {probes}")
             time.sleep(_WATCH)
 
     def _trigger_braquage(

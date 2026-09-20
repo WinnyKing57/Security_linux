@@ -5,7 +5,9 @@ import os
 import subprocess
 
 import security_linux.events as events
-from security_linux.i18n import _
+# Alias : le nom ``_t`` ne peut pas être masqué par une ré-affectation
+# runtime (contrairement à ``_``, nom d'argot aisément écrasé).
+from security_linux.i18n import _ as _t
 
 
 def _run(cmd: list[str], timeout: float = 10) -> tuple[int, str]:
@@ -25,7 +27,8 @@ def _active_user_session_id() -> str | None:
     for line in out.splitlines():
         parts = line.split()
         if len(parts) >= 4:
-            session_id, _, session_uid = parts[0], parts[1], parts[2]
+            # colonnes loginctl --no-legend : SESSION UID USER SEAT ...
+            session_id, session_uid = parts[0], parts[1]
             if session_uid.isdigit() and int(session_uid) == uid:
                 candidates.append(session_id)
     if not candidates:
@@ -52,7 +55,7 @@ def lock_screen() -> bool:
     if session_id:
         rc, msg = _run(["loginctl", "lock-session", session_id])
         if rc == 0:
-            events.log_event("lock", _("écran verrouillé (session {session})").format(session=session_id))
+            events.log_event("lock", _t("écran verrouillé (session {session})").format(session=session_id))
             return True
     for cmd_prefix in (
         ["qdbus6", "org.kde.screensaver", "/ScreenSaver", "Lock"],
@@ -63,9 +66,9 @@ def lock_screen() -> bool:
     ):
         rc, _ = _run(list(cmd_prefix), timeout=8)
         if rc == 0:
-            events.log_event("lock", _("écran verrouillé via {commande}").format(commande=" ".join(cmd_prefix)))
+            events.log_event("lock", _t("écran verrouillé via {commande}").format(commande=" ".join(cmd_prefix)))
             return True
-    events.log_event("error", _("échec du verrouillage d'écran"))
+    events.log_event("error", _t("échec du verrouillage d'écran"))
     return False
 
 

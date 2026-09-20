@@ -590,3 +590,115 @@ def test_led_marker_config_default():
 
     assert "led" in cfgmod.DEFAULT_CONFIG
     assert cfgmod.DEFAULT_CONFIG["led"]["enabled"] is False
+
+
+# ------------------------------------------------- verrouillage robustesse
+def test_engine_lock_fn_error_no_spam():
+    """Régression : si le verrouilleur plante, le moteur ne doit PAS
+    ré-essayer à chaque cycle (l'absence de mise à jour de ``_last_lock_ts``
+    causait un verrouillage d'écran en boucle, 1×/seconde)."""
+    import security_linux.events as events_mod
+
+    def boom():
+        raise RuntimeError("lock_failed_simulé")
+
+    cfg = copy.deepcopy(DEFAULT_CONFIG)
+    cfg["general"]["decision_mode"] = "AND"
+    cfg["general"]["lock_grace_seconds"] = 0
+    cfg["general"]["min_absent_seconds"] = 1
+    engine = Engine(cfg, boom, lambda: False)
+
+    states = {
+        "camera": FakeMon("absent", 5),
+        "bluetooth": FakeMon("absent", 5),
+        "location": MonitorResult("location", "home", at_home=True, offline=False),
+    }
+    first = engine.tick(states, manual_armed=True)
+    assert first["action"] == "lock_failed"
+    assert engine._last_lock_ts is not None
+    # cycle suivant dans la même fenêtre de répétition : aucune nouvelle tentative
+    second = engine.tick(states, manual_armed=True)
+    assert second["action"] is None
+
+
+def test_engine_idle_lock_fn_error_no_spam(monkeypatch):
+    """Même garantie pour le filet de sécurité (verrouillage par inactivité)."""
+    from security_linux import idle as idle_mod
+
+    def boom():
+        raise RuntimeError("lock_failed_simulé")
+
+    cfg = copy.deepcopy(DEFAULT_CONFIG)
+    cfg["general"]["idle_lock_minutes"] = 1
+    engine = Engine(cfg, boom, lambda: False)
+    monkeypatch.setattr(idle_mod, "idle_seconds", lambda: 300)
+
+    states = {
+        "camera": FakeMon("present", 0),
+        "bluetooth": FakeMon("present", 0),
+        "location": MonitorResult("location", "home", at_home=True, offline=False),
+    }
+    first = engine.tick(states, manual_armed=True)
+    assert first["action"] == "lock_failed"
+    second = engine.tick(states, manual_armed=True)
+    assert second["action"] is None
+
+
+def test_lock_screen_uses_loginctl_session(monkeypatch):
+    """Loginctl : colonnes SESSION UID USER SEAT — l'UID est parts[1]."""
+    import security_linux.lock as lockmod
+
+    calls: list[list[str]] = []
+    logged: list[tuple[str, str]] = []
+
+    def fake_run(cmd, timeout=10):
+        calls.append(list(cmd))
+        joined = " ".join(cmd)
+        if joined.startswith("loginctl show-session"):
+            return (0, "Type=x11\nActive=yes\n")
+        if joined.startswith("loginctl lock-session"):
+            return (0, "")
+        if joined.startswith("loginctl list-sessions"):
+            return (0, "3 1000 winny seat0\n")
+        return (0, "")
+
+    def fake_log_event(kind, message):
+        logged.append((kind, message))
+
+    monkeypatch.setattr(lockmod, "_run", fake_run)
+    monkeypatch.setattr(lockmod.events, "log_event", fake_log_event)
+    assert not hasattr(lockmod, "_")
+    assert callable(getattr(lockmod, "_t"))
+
+    assert lockmod.lock_screen() is True
+    assert any(cmd[1] == "lock-session" for cmd in calls)
+    assert any(kind == "lock" and "session 3" in msg for kind, msg in logged)
+
+
+def test_lock_screen_qdbus_fallback_shadowed_gettext(monkeypatch):
+    """Régression du bug production : même si ``_`` (gettext) était écrasé
+    par une chaîne, la ligne « écran verrouillé via ... » (tombée du crash
+    'str' object is not callable) passe par l'alias ``_t`` — non masqué."""
+    import security_linux.lock as lockmod
+
+    calls: list[list[str]] = []
+    logged: list[tuple[str, str]] = []
+
+    def fake_run(cmd, timeout=10):
+        calls.append(list(cmd))
+        return (0, "")
+
+    def fake_log_event(kind, message):
+        logged.append((kind, message))
+
+    monkeypatch.setattr(lockmod, "_run", fake_run)
+    monkeypatch.setattr(lockmod.events, "log_event", fake_log_event)
+    # Durcissement : plus aucun symbole global ``_`` dans lock.py (l'ancien
+    # binding gettext pouvait être écrasé par une chaîne à l'exécution).
+    assert not hasattr(lockmod, "_")
+    assert callable(getattr(lockmod, "_t"))
+
+    assert lockmod.lock_screen() is True
+    assert any(cmd[0] == "qdbus6" for cmd in calls)
+    # le journal « verrouillé via ... » passe par l'alias _t (non masqué)
+    assert any(kind == "lock" and "écran verrouillé" in msg for kind, msg in logged)
