@@ -36,6 +36,16 @@ _WATCH = 1.0
 _LOCK_FILE = None
 
 
+def should_trigger_braquage(decision: dict) -> bool:
+    """Le mode braquage ne sonne que sur une absence réelle (conditions
+    remplies), jamais sur le seul verrouillage d'inactivité."""
+    return (
+        decision.get("action") in ("lock", "relock")
+        and not runtime.is_debug()
+        and bool(decision.get("conditions", {}).get("met"))
+    )
+
+
 def _daemon_lock_path() -> Path:
     """Verrou d'instance unique : XDG_RUNTIME_DIR sinon répertoire de config."""
     if runtime.is_debug():
@@ -304,7 +314,7 @@ class Daemon:
                                 events.log_event("capture", _("image locale conservée : {snap}").format(snap=snap))
                         except Exception as exc:  # noqa: BLE001
                             events.log_event("error", _("capture : {erreur}").format(erreur=exc))
-                if decision.get("action") in ("lock", "relock") and not runtime.is_debug():
+                if should_trigger_braquage(decision):
                     self._trigger_braquage(self._last_states, capture_path=snap, armed_state=decision.get("armed", {}))
                 if decision.get("tamper") and not runtime.is_debug():
                     self._handle_tamper(self._last_states, armed_state=decision.get("armed", {}))

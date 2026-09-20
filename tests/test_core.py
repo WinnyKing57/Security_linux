@@ -702,3 +702,43 @@ def test_lock_screen_qdbus_fallback_shadowed_gettext(monkeypatch):
     assert any(cmd[0] == "qdbus6" for cmd in calls)
     # le journal « verrouillé via ... » passe par l'alias _t (non masqué)
     assert any(kind == "lock" and "écran verrouillé" in msg for kind, msg in logged)
+
+
+def test_engine_idle_lock_keeps_conditions_unmet(monkeypatch):
+    """Le seuil « braquage » repose sur cond.met : le verrouillage par
+    inactivité ne doit jamais remplir les conditions d'absence."""
+    import security_linux.idle as idle_mod
+
+    cfg = copy.deepcopy(DEFAULT_CONFIG)
+    cfg["general"]["idle_lock_minutes"] = 1
+    engine = Engine(cfg, lambda: True, lambda: False)
+    monkeypatch.setattr(idle_mod, "idle_seconds", lambda: 300)
+
+    states = {
+        "camera": FakeMon("present", 0),
+        "bluetooth": FakeMon("present", 0),
+        "location": MonitorResult("location", "home", at_home=True, offline=False),
+    }
+    decision = engine.tick(states, manual_armed=True)
+    assert decision["action"] == "lock"
+    assert decision["conditions"]["met"] is False
+
+
+def test_should_trigger_braquage_only_on_real_absence(monkeypatch):
+    """Régression « braquage sans raison » : pas d'alarme sur le seul
+    verrouillage d'inactivité, seulement sur une absence réelle (conditions)."""
+    import security_linux.daemon as daemonmod
+    from security_linux.daemon import should_trigger_braquage
+
+    monkeypatch.setattr(daemonmod.runtime, "is_debug", lambda: False)
+    assert should_trigger_braquage({"action": "lock", "conditions": {"met": True}})
+    assert should_trigger_braquage({"action": "relock", "conditions": {"met": True}})
+    # verrouillage par inactivité : conditions non remplies -> pas d'alarme
+    assert not should_trigger_braquage({"action": "lock", "conditions": {"met": False}})
+    assert not should_trigger_braquage({"action": "relock", "conditions": {"met": False}})
+    assert not should_trigger_braquage({"action": "lock_failed", "conditions": {"met": True}})
+    assert not should_trigger_braquage({"action": None, "conditions": {"met": True}})
+    assert not should_trigger_braquage({})
+
+    monkeypatch.setattr(daemonmod.runtime, "is_debug", lambda: True)
+    assert not should_trigger_braquage({"action": "lock", "conditions": {"met": True}})
