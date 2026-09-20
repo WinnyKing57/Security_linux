@@ -150,6 +150,16 @@ def use_cnn(path: str | None = None) -> bool:
     return value in ("1", "true", "yes", "on")
 
 
+def disabled(path: str | None = None) -> bool:
+    """True si Howdy est désactivé (clé ``disabled`` du fichier config.ini).
+
+    Howdy lit la clé ``[core] disabled`` : quand elle vaut ``true``, la
+    reconnaissance faciale est coupée (le mot de passe reprend seul la main).
+    """
+    value = (config_value("disabled", path) or "false").strip().lower()
+    return value in ("1", "true", "yes", "on")
+
+
 def tune_script_path() -> str | None:
     """Chemin du script de réglage de la fiabilité (exécuté en root)."""
     repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -175,3 +185,19 @@ def tune_command(certainty_value: float | None = None, use_cnn_value: bool | Non
     if terminal:
         return [terminal, "-e", "sudo", "sh", script, *args]
     return ["sudo", "sh", script, *args]
+
+
+def toggle_command(enable: bool) -> list[str] | None:
+    """Commande pour activer/désactiver réellement Howdy (root, terminal).
+
+    Écrit la clé ``[core] disabled`` du config.ini Howdy : ``true`` (OFF)
+    ou ``false`` (ON). Retourne ``None`` si le script de réglage est absent.
+    """
+    script = tune_script_path()
+    if not script:
+        return None
+    flag = "--enable" if enable else "--disable"
+    terminal = shutil.which("x-terminal-emulator") or shutil.which("konsole") or shutil.which("gnome-terminal")
+    if terminal:
+        return [terminal, "-e", "sudo", "sh", script, flag]
+    return ["sudo", "sh", script, flag]

@@ -85,18 +85,40 @@ def normalize_face(crop_bgr: object) -> object | None:
     return gray.astype(np.float32) / 255.0
 
 
-def similarity(crop_a: object, crop_b: object) -> float:
-    """Score de similarité (corrélation normalisée) entre deux visages normalisés."""
+def _ncc(a, b):
+    """Corrélation croisée normalisée entre deux vecteurs lissage à zéro."""
     import numpy as np
 
-    a = np.asarray(crop_a, dtype=np.float32).ravel()
-    b = np.asarray(crop_b, dtype=np.float32).ravel()
-    a -= a.mean()
-    b -= b.mean()
+    a = np.asarray(a, dtype=np.float32).ravel()
+    b = np.asarray(b, dtype=np.float32).ravel()
+    a = a - a.mean()
+    b = b - b.mean()
     denom = float(np.sqrt(np.sum(a * a) * np.sum(b * b)))
     if denom == 0.0:
         return 0.0
     return float(np.sum(a * b) / denom)
+
+
+def _gradient_magnitude(gray: object):
+    """Profil géométrique : norme du gradient du visage (yeux, nez, bouche)."""
+    import numpy as np
+
+    gx, gy = np.gradient(np.asarray(gray, dtype=np.float32))
+    return np.sqrt(gx * gx + gy * gy)
+
+
+def similarity_components(crop_a: object, crop_b: object) -> tuple[float, float, float]:
+    """Score global et ses deux composantes (score, intensité, géométrie)."""
+    ga = _gradient_magnitude(crop_a)
+    gb = _gradient_magnitude(crop_b)
+    intensity = _ncc(crop_a, crop_b)
+    geometry = _ncc(ga, gb)
+    return (0.5 * intensity + 0.5 * geometry, intensity, geometry)
+
+
+def similarity(crop_a: object, crop_b: object) -> float:
+    """Score de similarité global entre deux visages normalisés (0..1 d'usage)."""
+    return similarity_components(crop_a, crop_b)[0]
 
 
 def _largest_face(frame_bgr, cascade):
@@ -208,22 +230,56 @@ def verify_face(device: str | None = None, threshold: float = _DEFAULT_THRESHOLD
     dev = resolve_device(device)
     if dev is None:
         return FaceCheckResult(ok=False, message=_("Aucun périphérique vidéo détecté."), path=str(ref))
-    frame = capture_frame(dev, timeout=6.0)
-    if frame is None:
-        return FaceCheckResult(ok=False, message=_("Aucune image capturée ({dev}).").format(dev=dev), path=str(ref))
-    live_face = _largest_face(frame, cascade)
-    if live_face is None:
+
+    # Plusieurs captures : le score est la moyenne des visages validés. Une
+    # seule image peut être bruitée (similitude artificiellement haute) ; la
+    # moyenne rend le verdict stable et les échecs reproductibles.
+    n_frames = 3
+    scores: list[float] = []
+    intents: list[float] = []
+    geoms: list[float] = []
+    deadline = time.monotonic() + 8.0
+    while len(scores) < n_frames and time.monotonic() < deadline:
+        frame = capture_frame(dev, timeout=2.0)
+        if frame is None:
+            break
+        live_face = _largest_face(frame, cascade)
+        if live_face is None:
+            continue
+        sc, it_c, gm_c = similarity_components(ref_norm, normalize_face(live_face))
+        scores.append(sc)
+        intents.append(it_c)
+        geoms.append(gm_c)
+    if not scores:
         return FaceCheckResult(
             ok=False,
             message=_("Aucun visage détecté devant la caméra. Approchez votre visage."),
             path=str(ref),
             details={"reference": str(ref)},
         )
-    score = similarity(ref_norm, normalize_face(live_face))
+    score = sum(scores) / len(scores)
+    intensity = sum(intents) / len(intents)
+    geometry = sum(geoms) / len(geoms)
     matched = score >= threshold
     if matched:
-        message = _("Correspondance confirmée (score {score:.2f}).").format(score=score)
+        message = _(
+            "Correspondance confirmée (score {score:.2f} — intensité {it:.2f} / géométrie {geom:.2f})."
+        ).format(score=score, it=intensity, geom=geometry)
     else:
-        message = _("Pas de correspondance (score {score:.2f} < {seuil:.2f}).").format(score=score, seuil=threshold)
-    return FaceCheckResult(ok=True, matched=matched, score=score, message=message, path=str(ref),
-                           details={"reference": str(ref), "threshold": threshold})
+        message = _(
+            "Pas de correspondance (score {score:.2f} < {seuil:.2f} — intensité {it:.2f} / géométrie {geom:.2f})."
+        ).format(score=score, seuil=threshold, it=intensity, geom=geometry)
+    return FaceCheckResult(
+        ok=True,
+        matched=matched,
+        score=score,
+        message=message,
+        path=str(ref),
+        details={
+            "reference": str(ref),
+            "threshold": threshold,
+            "scores": scores,
+            "intensity": intensity,
+            "geometry": geometry,
+        },
+    )

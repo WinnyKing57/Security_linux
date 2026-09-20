@@ -13,6 +13,7 @@ from __future__ import annotations
 import atexit
 import fcntl
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -895,6 +896,11 @@ class SecuritySettingsDialog:
         fbox.pack_start(self.face_ref_label, False, True, 0)
         fbox.pack_start(btns, False, True, 0)
         self.face_threshold = self._spin(self.cfg.get("faces", {}).get("threshold", 0.45), 0.01, 0.99, 0.01)
+        self.face_threshold.set_tooltip_text(
+            _("Similarité (0..1) exigée pour valider : plus haut = plus strict. "
+              "Ex. 0.45 modéré ; 0.9+ exige un visage quasi identique (éclairage "
+              "et angle proches). Dans l'onglet Howdy, l'échelle est différente (1..10).")
+        )
         thr_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         thr_row.pack_start(Gtk.Label(label=_("Seuil de correspondance (0..1, pas de 0.01)"), xalign=0), True, True, 0)
         thr_row.pack_end(self.face_threshold, False, True, 0)
@@ -1147,8 +1153,16 @@ class SecuritySettingsDialog:
         )
         self.loc_gps_status = Gtk.Label(label="", xalign=0)
         self.loc_gps_status.set_line_wrap(True)
+        self.loc_precision_btn = Gtk.Button(label=_("Activer la pleine précision (mot de passe root)"))
+        self.loc_precision_btn.set_tooltip_text(
+            _("Ajoute l'application à la liste blanche des agents GeoClue "
+              "(/etc/geoclue/geoclue.conf puis relance du service). À faire une fois.")
+        )
+        self.loc_precision_btn.connect("clicked", self._location_enable_precision)
+        self.loc_precision_btn.hide()
         v.pack_start(self.loc_gps_btn, False, True, 0)
         v.pack_start(self.loc_gps_status, False, True, 0)
+        v.pack_start(self.loc_precision_btn, False, True, 0)
 
         v.pack_start(Gtk.Label(label=_("Hors domicile ou hors ligne ⇒ le système se réarme automatiquement."), xalign=0), False, True, 0)
         return v
@@ -1158,6 +1172,7 @@ class SecuritySettingsDialog:
             return
         self._gps_fetching = True
         self.loc_gps_btn.set_sensitive(False)
+        self.loc_precision_btn.hide()
         self.loc_gps_status.set_markup(
             _("Récupération de la position GPS (GeoClue)… — autorisez la demande "
               "de localisation au besoin.")
@@ -1165,50 +1180,105 @@ class SecuritySettingsDialog:
         threading.Thread(target=self._do_fetch_position, daemon=True).start()
 
     def _do_fetch_position(self):
-        from security_linux.monitors.location import current_position
+        from security_linux.monitors.location import current_position_with_accuracy
 
         try:
-            pos = current_position()
+            pos = current_position_with_accuracy()
         except Exception as exc:  # noqa: BLE001
             pos = None
             events.log_event("error", _("position GPS : {erreur}").format(erreur=exc))
         GLib.idle_add(self._on_position_fetched, pos)
 
     def _on_position_fetched(self, pos):
+        from security_linux.monitors.location import _ACCURACY_WARN_M
+
         self._gps_fetching = False
         self.loc_gps_btn.set_sensitive(True)
         if pos is None:
             self.loc_gps_status.set_markup(
-                _('<span color="red">Position introuvable — activez la localisation '
-                  'système (GeoClue) ou saisissez la latitude/longitude manuellement.</span>')
+                _('<span color="orange">Position introuvable — GeoClue n\'a fourni aucune '
+                  'position. Vérifiez la localisation système (paramètres) puis réessayez, '
+                  'ou saisissez la latitude/longitude manuellement.</span>')
             )
+            self.loc_precision_btn.show()
             return
-        lat, lon = pos
+        lat, lon, accuracy = pos
         self.loc_lat.set_text(f"{lat:.6f}")
         self.loc_lon.set_text(f"{lon:.6f}")
-        self.loc_gps_status.set_markup(
-            _('<span color="green">Position actuelle définie comme domicile : '
-              "{lat}, {lon}.</span>").format(lat=f"{lat:.6f}", lon=f"{lon:.6f}")
-        )
+        if accuracy is not None and accuracy > _ACCURACY_WARN_M:
+            # Position "ville" (~26 km) : trop grossière pour servir de domicile
+            # (risque de fausses alarmes). Renseignée, mais prévenu + action root.
+            self.loc_precision_btn.show()
+            self.loc_gps_status.set_markup(
+                _('<span color="orange">Position approximative (précision {acc:.0f} m) — trop '
+                  'grossière pour définir le domicile : {lat}, {lon}. Elle est saisie à titre '
+                  'indicatif : activez la pleine précision puis recliquez, ou vérifiez.</span>').format(
+                    acc=accuracy, lat=f"{lat:.6f}", lon=f"{lon:.6f}"
+                )
+            )
+            return
+        self.loc_precision_btn.hide()
+        if accuracy is not None:
+            self.loc_gps_status.set_markup(
+                _('<span color="green">Position actuelle définie comme domicile : '
+                  "{lat}, {lon} (précision {acc:.0f} m).</span>").format(
+                    lat=f"{lat:.6f}", lon=f"{lon:.6f}", acc=accuracy
+                )
+            )
+        else:
+            self.loc_gps_status.set_markup(
+                _('<span color="green">Position actuelle définie comme domicile : '
+                  "{lat}, {lon}.</span>").format(lat=f"{lat:.6f}", lon=f"{lon:.6f}")
+            )
+
+    def _location_enable_precision(self, *_w):
+        repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        script = os.path.join(repo, "scripts", "geoclue_whitelist.sh")
+        if not os.path.isfile(script):
+            self.app._msg(_("Script de précision GeoClue introuvable : {script}").format(script=script), error=True)
+            return
+        terminal = shutil.which("x-terminal-emulator") or shutil.which("konsole") or shutil.which("gnome-terminal")
+        if terminal:
+            cmd = [terminal, "-e", "sudo", "sh", script]
+        else:
+            cmd = ["sudo", "sh", script]
+        try:
+            subprocess.Popen(cmd, start_new_session=True)
+            self.loc_gps_status.set_markup(
+                _("Précision GeoClue lancée dans un terminal root — validez le mot de passe, "
+                  "puis recliquez sur « Utiliser ma position actuelle ».")
+            )
+        except OSError as exc:
+            self.app._msg(_("Impossible de lancer le script : {erreur}").format(erreur=exc), error=True)
 
     def _howdy_tab(self):
         v = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        h = self.cfg["howdy"]
-        # Howdy est dormant en v1 : l'interrupteur est purement informatif et
-        # ne peut pas être basculé (aucun code ne consomme howdy.enabled).
-        self.howdy_enabled = Gtk.Switch(active=bool(h["enabled"]))
-        self.howdy_enabled.set_sensitive(False)
+        installed = howdy_ctrl.is_installed()
+        # Bascule RÉELLE de Howdy : écrit la clé [core] disabled du config.ini
+        # (mot de passe root demandé dans un terminal). La GUI le confirme en
+        # relisant la configuration pendant quelques secondes.
+        self.howdy_enabled = Gtk.Switch(active=installed and not howdy_ctrl.disabled())
+        self.howdy_enabled.set_sensitive(installed)
         self.howdy_enabled.set_tooltip_text(
-            _("Désactivé en v1 : le déverrouillage d'écran reste le mot de passe de session. "
-              "L'activation du déverrouillage facial est prévue en v2 (2FA).")
+            _("Active/désactive le module Howdy (PAM) : contrôle la reconnaissance "
+              "faciale au déverrouillage de session.")
         )
-        installed = _("installé") if howdy_ctrl.is_installed() else _("non installé")
-        status = howdy_ctrl.models_status()
-        state_label = Gtk.Label(label=_("Howdy : {install} · visages : {statut}").format(install=installed, statut=status))
+        self.howdy_enabled.connect("state-set", self._on_howdy_toggle)
+        self._howdy_poll_id = None
+        self._howdy_wanted = None
+        self._howdy_poll_n = 0
+        if not installed:
+            self.howdy_enabled.set_tooltip_text(_("Howdy n'est pas installé — utilisez le bouton d'installation."))
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         row.pack_start(Gtk.Label(label=_("Activer le déverrouillage facial"), xalign=0), True, True, 0)
         row.pack_end(self.howdy_enabled, False, True, 0)
         v.pack_start(row, False, True, 0)
+        self.howdy_state = Gtk.Label(label="", xalign=0)
+        self.howdy_state.set_line_wrap(True)
+        v.pack_start(self.howdy_state, False, True, 0)
+
+        status = howdy_ctrl.models_status()
+        state_label = Gtk.Label(label=_("Howdy : {install} · visages : {statut}").format(install=_("installé") if installed else _("non installé"), statut=status))
         v.pack_start(state_label, False, True, 0)
 
         # --- Fiabilité de la correspondance (config.ini Howdy) ---
@@ -1220,9 +1290,13 @@ class SecuritySettingsDialog:
         rel_box.set_margin_end(8)
 
         self.howdy_certainty = self._spin(howdy_ctrl.certainty(), 1.0, 10.0, 0.5)
+        self.howdy_certainty.set_tooltip_text(
+            _("Échelle Howdy (1..10), indépendante de celle de la caméra (0..1) : "
+              "plus bas = plus strict (refuse plus facilement), plus haut = plus tolérant.")
+        )
         self.howdy_cnn = Gtk.Switch(active=howdy_ctrl.use_cnn())
         rrow1 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        rrow1.pack_start(Gtk.Label(label=_("Seuil de correspondance (1..10, plus bas = plus strict)"), xalign=0), True, True, 0)
+        rrow1.pack_start(Gtk.Label(label=_("Seuil Howdy (1..10 — plus bas = plus strict)"), xalign=0), True, True, 0)
         rrow1.pack_end(self.howdy_certainty, False, True, 0)
         rel_box.pack_start(rrow1, False, True, 0)
         rrow2 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -1243,7 +1317,7 @@ class SecuritySettingsDialog:
         rel_frame.add(rel_box)
         v.pack_start(rel_frame, False, True, 0)
 
-        if not howdy_ctrl.is_installed():
+        if not installed:
             btn_install = Gtk.Button(label=_("Installer Howdy (via terminal root)"))
             btn_install.connect("clicked", lambda *_x: self.app._launch_howdy_install())
             v.pack_start(btn_install, False, True, 0)
@@ -1254,13 +1328,68 @@ class SecuritySettingsDialog:
             v.pack_start(btn_reinstall, False, True, 0)
 
         v.pack_start(
-            Gtk.Label(label=_("Un visage doit être enregistré avant d'activer Howdy.\n"
-                              "Le déverrouillage v1 reste le mot de passe de session ; "
-                              "l'interrupteur est inactif tant que le 2FA n'est pas implémenté (v2)."),
+            Gtk.Label(label=_("La bascule modifie la clé « disabled » du config.ini Howdy "
+                              "(mot de passe root demandé). Un visage doit être enregistré "
+                              "(« howdy add ») pour que le déverrouillage fonctionne."),
                       xalign=0),
             False, True, 0,
         )
         return v
+
+    def _on_howdy_toggle(self, switch, state):
+        """Bascule la reconnaissance faciale Howdy (config.ini [core] disabled)."""
+        if not howdy_ctrl.is_installed():
+            GLib.idle_add(self.howdy_enabled.set_active, not state)
+            self.howdy_state.set_markup(
+                '<span color="red">' + _("Howdy n'est pas installé — utilisez le bouton d'installation.") + "</span>"
+            )
+            return True
+        cmd = howdy_ctrl.toggle_command(bool(state))
+        if not cmd:
+            GLib.idle_add(self.howdy_enabled.set_active, not state)
+            self.howdy_state.set_markup('<span color="red">' + _("Script de bascule Howdy introuvable.") + "</span>")
+            return True
+        try:
+            subprocess.Popen(cmd, start_new_session=True)
+        except OSError as exc:
+            GLib.idle_add(self.howdy_enabled.set_active, not state)
+            self.howdy_state.set_markup(
+                '<span color="red">' + _("Impossible de lancer la bascule : {erreur}").format(erreur=exc) + "</span>"
+            )
+            return True
+        self._howdy_wanted = bool(state)
+        self._howdy_poll_n = 0
+        if self._howdy_poll_id is not None:
+            GLib.source_remove(self._howdy_poll_id)
+        self._howdy_poll_id = GLib.timeout_add(1000, self._howdy_poll)
+        self.howdy_state.set_markup(
+            '<span color="orange">' + _("Bascule lancée dans un terminal root — validez le mot de passe…") + "</span>"
+        )
+        return True
+
+    def _howdy_poll(self):
+        """Relit config.ini tant que l'état réel ne correspond pas à la demande."""
+        wanted = getattr(self, "_howdy_wanted", None)
+        if wanted is None:
+            return False
+        current = howdy_ctrl.is_installed() and not howdy_ctrl.disabled()
+        if current == wanted:
+            self._howdy_wanted = None
+            self._howdy_poll_id = None
+            GLib.idle_add(self.howdy_enabled.set_active, current)
+            label = _("Howdy activé.") if current else _("Howdy désactivé.")
+            self.howdy_state.set_markup(f'<span color="green">{label}</span>')
+            return False
+        self._howdy_poll_n = getattr(self, "_howdy_poll_n", 0) + 1
+        if self._howdy_poll_n >= 60:
+            self._howdy_wanted = None
+            self._howdy_poll_id = None
+            GLib.idle_add(self.howdy_enabled.set_active, current)
+            self.howdy_state.set_markup(
+                '<span color="red">' + _("Bascule Howdy non confirmée — vérifiez le terminal root.") + "</span>"
+            )
+            return False
+        return True
 
     def _features_tab(self):
         """Onglet des fonctions avancées : Silentium et Mode braquage."""
@@ -1495,9 +1624,9 @@ class SecuritySettingsDialog:
             l["home_lat"] = l["home_lon"] = 0.0
         l["radius_km"] = float(self.loc_rad.get_value())
 
-        # Note : howdy.enabled n'est volontairement pas persisté en v1 — Howdy
-        # est dormant et aucun composant ne lit ce champ. L'activation réelle
-        # (2FA visage + code) sera implémentée en v2.
+        # Howdy est piloté réellement par sa propre configuration
+        # (/etc/howdy/config.ini, clé [core] disabled) : la bascule de
+        # l'onglet Howdy écrit directement dedans (mot de passe root).
 
         # Général
         self.cfg["general"]["idle_lock_minutes"] = int(self.idle_lock.get_value())

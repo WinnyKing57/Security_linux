@@ -798,3 +798,119 @@ def test_faces_default_threshold_clamped(monkeypatch):
     assert faces.default_threshold() == 0.0
     cfg["faces"]["threshold"] = 0.65
     assert faces.default_threshold() == 0.65
+
+# --------------------------------------- bascule Howdy / réglage fiabilité
+def test_howdy_disabled_key_parsing():
+    import configparser
+    import tempfile
+
+    from security_linux import howdy_ctrl
+
+    with tempfile.NamedTemporaryFile("w", suffix=".ini", delete=False) as fh:
+        fh.write(
+            "[core]\n"
+            "disabled = true\n"
+            "use_cnn = false\n"
+            "[video]\n"
+            "certainty = 3.5\n"
+        )
+        path = fh.name
+    try:
+        assert howdy_ctrl.disabled(path) is True
+        assert howdy_ctrl.use_cnn(path) is False
+        assert howdy_ctrl.certainty(path) == 3.5
+    finally:
+        import os
+
+        os.unlink(path)
+
+
+def test_howdy_toggle_command_flags(monkeypatch):
+    from security_linux import howdy_ctrl
+
+    monkeypatch.setattr(howdy_ctrl.shutil, "which", lambda *_a, **_k: "/usr/bin/konsole")
+    enable = howdy_ctrl.toggle_command(True)
+    disable = howdy_ctrl.toggle_command(False)
+    assert enable is not None and disable is not None
+    assert "--enable" in enable and "--disable" in disable
+    assert enable[-1].startswith("sh") is False  # via konsole -e sudo sh script
+    assert "--enable" in enable[-1] or "--enable" in enable
+
+
+def test_tune_howdy_script_enable_disable(tmp_path):
+    import os
+    import subprocess
+
+    ini = tmp_path / "config.ini"
+    ini.write_text("[core]\nuse_cnn = false\n[video]\ncertainty = 3.5\n")
+    script = "scripts/tune_howdy.sh"
+    import shutil
+
+    assert os.path.exists(script)
+    env = dict(os.environ, HOWDY_CONFIG=str(ini))
+    r = subprocess.run(["sh", script, "--disable"], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    assert "disabled = true" in ini.read_text()
+    r = subprocess.run(["sh", script, "--enable", "--certainty", "5.0"], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    text = ini.read_text()
+    assert "disabled = false" in text
+    assert "certainty = 5.0" in text
+
+
+# ------------------------------------------- similarité visage discriminante
+def test_faces_similarity_discriminates(monkeypatch):
+    import numpy as np
+    from security_linux import faces
+
+    np.random.seed(7)
+    a = np.random.rand(128, 128).astype(np.float32)
+    c = a.copy()
+    # identique -> proche de 1
+    score_a, it_a, geo_a = faces.similarity_components(a, c)
+    assert score_a > 0.999
+    # deux images aléatoires indépendantes -> faible
+    b = np.random.rand(128, 128).astype(np.float32)
+    score_b, it_b, geo_b = faces.similarity_components(a, b)
+    assert score_b < 0.5
+    assert score_b < score_a
+
+
+# ------------------------------------ moniteur GPS : précision insuffisante
+def test_location_gps_insufficient_precision_is_neutral(monkeypatch):
+    from security_linux.monitors.location import LocationMonitor
+
+    mon = LocationMonitor(
+        {"method": "gps", "home_lat": 47.34, "home_lon": 0.66, "radius_km": 1.0}
+    )
+
+    def fake_run(cmd, timeout=8):
+        if cmd[0] == "ip":
+            return 0, "default via 192.168.1.1"
+        return 0, ""
+
+    monkeypatch.setattr(LocationMonitor, "_run", staticmethod(fake_run))
+    monkeypatch.setattr(LocationMonitor, "_geoclue_position", lambda self: (47.35, 0.67, 26000.0))
+    res = mon.tick()
+    # position trop grossière (26 km >> rayon 1 km) -> verdict neutre, PAS d'alarme
+    assert res.at_home is None
+    assert "précision insuffisante" in res.detail
+
+
+def test_location_gps_precise_home(monkeypatch):
+    from security_linux.monitors.location import LocationMonitor
+
+    mon = LocationMonitor(
+        {"method": "gps", "home_lat": 47.34, "home_lon": 0.66, "radius_km": 1.0}
+    )
+
+    def fake_run(cmd, timeout=8):
+        if cmd[0] == "ip":
+            return 0, "default via 192.168.1.1"
+        return 0, ""
+
+    monkeypatch.setattr(LocationMonitor, "_run", staticmethod(fake_run))
+    # position exacte à ~400 m du domicile avec précision 500 m -> à la maison
+    monkeypatch.setattr(LocationMonitor, "_geoclue_position", lambda self: (47.345, 0.6655, 500.0))
+    res = mon.tick()
+    assert res.at_home is True

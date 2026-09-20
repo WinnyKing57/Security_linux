@@ -1,13 +1,16 @@
 #!/bin/sh
 # Réglage de la fiabilité de Howdy : met à jour /etc/howdy/config.ini
-# (certainty = seuil, plus bas = plus strict ; use_cnn = détection CNN).
+# (certainty = seuil, plus bas = plus strict ; use_cnn = détection CNN ;
+#  disabled = active/désactive réellement Howdy).
 # Usage (root) : tune_howdy.sh [--certainty N] [--use-cnn | --no-use-cnn]
+#                              [--enable | --disable]
 set -eu
 
 INI="${HOWDY_CONFIG:-/etc/howdy/config.ini}"
 
 CERT=""
 USE_CNN=""
+DISABLED=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --certainty)
@@ -20,6 +23,14 @@ while [ "$#" -gt 0 ]; do
       ;;
     --no-use-cnn)
       USE_CNN=false
+      shift
+      ;;
+    --enable)
+      DISABLED=false
+      shift
+      ;;
+    --disable)
+      DISABLED=true
       shift
       ;;
     *)
@@ -71,6 +82,14 @@ if [ -n "$USE_CNN" ]; then
   patch_key core use_cnn "$USE_CNN"
   echo "=> use_cnn = $USE_CNN"
 fi
+if [ -n "$DISABLED" ]; then
+  patch_key core disabled "$DISABLED"
+  if [ "$DISABLED" = "true" ]; then
+    echo "=> Howdy DÉSACTIVÉ (disabled = true)"
+  else
+    echo "=> Howdy ACTIVÉ (disabled = false)"
+  fi
+fi
 
 echo "config Howdy mise à jour :"
-grep -nE '^[ \t]*(certainty|use_cnn)' "$INI" || true
+grep -nE '^[ \t]*(certainty|use_cnn|disabled)' "$INI" || true
