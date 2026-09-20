@@ -894,9 +894,9 @@ class SecuritySettingsDialog:
         btns.pack_start(btn_check, False, True, 0)
         fbox.pack_start(self.face_ref_label, False, True, 0)
         fbox.pack_start(btns, False, True, 0)
-        self.face_threshold = self._spin(self.cfg.get("faces", {}).get("threshold", 0.45), 0.1, 0.9, 0.05)
+        self.face_threshold = self._spin(self.cfg.get("faces", {}).get("threshold", 0.45), 0.01, 0.99, 0.01)
         thr_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        thr_row.pack_start(Gtk.Label(label=_("Seuil de correspondance (0..1)"), xalign=0), True, True, 0)
+        thr_row.pack_start(Gtk.Label(label=_("Seuil de correspondance (0..1, pas de 0.01)"), xalign=0), True, True, 0)
         thr_row.pack_end(self.face_threshold, False, True, 0)
         fbox.pack_start(thr_row, False, True, 0)
         fbox.pack_start(self.face_status, False, True, 0)
@@ -1068,6 +1068,23 @@ class SecuritySettingsDialog:
             self.face_status.set_markup(f'<span color="#c77">✘ {result.message}</span>')
         return GLib.SOURCE_REMOVE
 
+    def _apply_howdy_reliability(self):
+        if not howdy_ctrl.is_installed():
+            self.app._msg(_("Howdy n'est pas installé sur ce système."), error=True)
+            return
+        certainty_value = float(self.howdy_certainty.get_value())
+        use_cnn_value = bool(self.howdy_cnn.get_active())
+        cmd = howdy_ctrl.tune_command(certainty_value, use_cnn_value)
+        if not cmd:
+            self.app._msg(_("Script de réglage Howdy introuvable ou aucun terminal disponible."), error=True)
+            return
+        try:
+            subprocess.Popen(cmd, start_new_session=True)
+            self.app._msg(_("Réglage de fiabilité lancé dans un terminal root.\n"
+                            "Vérifiez le mot de passe puis la sortie (certainty, use_cnn)."))
+        except OSError as exc:
+            self.app._msg(_("Impossible de lancer le réglage : {erreur}").format(erreur=exc), error=True)
+
     def _bluetooth_tab(self):
         v = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         b = self.cfg["bluetooth"]
@@ -1121,8 +1138,58 @@ class SecuritySettingsDialog:
             row.pack_start(Gtk.Label(label=lbl, xalign=0), True, True, 0)
             row.pack_end(wgt, False, True, 0)
             v.pack_start(row, False, True, 0)
+
+        self.loc_gps_btn = Gtk.Button(label=_("Utiliser ma position actuelle"))
+        self.loc_gps_btn.connect("clicked", self._set_home_from_position)
+        self.loc_gps_btn.set_tooltip_text(
+            _("Interroge GeoClue (position GPS de l'ordinateur) et remplit "
+              "la latitude/longitude du domicile avec la position courante.")
+        )
+        self.loc_gps_status = Gtk.Label(label="", xalign=0)
+        self.loc_gps_status.set_line_wrap(True)
+        v.pack_start(self.loc_gps_btn, False, True, 0)
+        v.pack_start(self.loc_gps_status, False, True, 0)
+
         v.pack_start(Gtk.Label(label=_("Hors domicile ou hors ligne ⇒ le système se réarme automatiquement."), xalign=0), False, True, 0)
         return v
+
+    def _set_home_from_position(self, *_w):
+        if getattr(self, "_gps_fetching", False):
+            return
+        self._gps_fetching = True
+        self.loc_gps_btn.set_sensitive(False)
+        self.loc_gps_status.set_markup(
+            _("Récupération de la position GPS (GeoClue)… — autorisez la demande "
+              "de localisation au besoin.")
+        )
+        threading.Thread(target=self._do_fetch_position, daemon=True).start()
+
+    def _do_fetch_position(self):
+        from security_linux.monitors.location import current_position
+
+        try:
+            pos = current_position()
+        except Exception as exc:  # noqa: BLE001
+            pos = None
+            events.log_event("error", _("position GPS : {erreur}").format(erreur=exc))
+        GLib.idle_add(self._on_position_fetched, pos)
+
+    def _on_position_fetched(self, pos):
+        self._gps_fetching = False
+        self.loc_gps_btn.set_sensitive(True)
+        if pos is None:
+            self.loc_gps_status.set_markup(
+                _('<span color="red">Position introuvable — activez la localisation '
+                  'système (GeoClue) ou saisissez la latitude/longitude manuellement.</span>')
+            )
+            return
+        lat, lon = pos
+        self.loc_lat.set_text(f"{lat:.6f}")
+        self.loc_lon.set_text(f"{lon:.6f}")
+        self.loc_gps_status.set_markup(
+            _('<span color="green">Position actuelle définie comme domicile : '
+              "{lat}, {lon}.</span>").format(lat=f"{lat:.6f}", lon=f"{lon:.6f}")
+        )
 
     def _howdy_tab(self):
         v = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -1143,6 +1210,38 @@ class SecuritySettingsDialog:
         row.pack_end(self.howdy_enabled, False, True, 0)
         v.pack_start(row, False, True, 0)
         v.pack_start(state_label, False, True, 0)
+
+        # --- Fiabilité de la correspondance (config.ini Howdy) ---
+        rel_frame = Gtk.Frame(label=_("Fiabilité de la concordance du visage"))
+        rel_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        rel_box.set_margin_top(8)
+        rel_box.set_margin_bottom(8)
+        rel_box.set_margin_start(8)
+        rel_box.set_margin_end(8)
+
+        self.howdy_certainty = self._spin(howdy_ctrl.certainty(), 1.0, 10.0, 0.5)
+        self.howdy_cnn = Gtk.Switch(active=howdy_ctrl.use_cnn())
+        rrow1 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        rrow1.pack_start(Gtk.Label(label=_("Seuil de correspondance (1..10, plus bas = plus strict)"), xalign=0), True, True, 0)
+        rrow1.pack_end(self.howdy_certainty, False, True, 0)
+        rel_box.pack_start(rrow1, False, True, 0)
+        rrow2 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        rrow2.pack_start(Gtk.Label(label=_("Détection CNN (plus précise, modèle plus lourd)"), xalign=0), True, True, 0)
+        rrow2.pack_end(self.howdy_cnn, False, True, 0)
+        rel_box.pack_start(rrow2, False, True, 0)
+
+        b_tune = Gtk.Button(label=_("Appliquer les réglages (mot de passe root)"))
+        b_tune.connect("clicked", lambda *_w: self._apply_howdy_reliability())
+        rel_box.pack_start(b_tune, False, True, 0)
+        rel_box.pack_start(
+            Gtk.Label(label=_("Certainty : la valeur actuelle (ex. 3) est affichée ci-dessus. "
+                              "Un seuil plus bas refuse plus facilement (moins d'erreurs de véracité), "
+                              "un seuil plus haut accepte plus facilement."),
+                      xalign=0, wrap=False),
+            False, True, 0,
+        )
+        rel_frame.add(rel_box)
+        v.pack_start(rel_frame, False, True, 0)
 
         if not howdy_ctrl.is_installed():
             btn_install = Gtk.Button(label=_("Installer Howdy (via terminal root)"))
@@ -1337,9 +1436,15 @@ class SecuritySettingsDialog:
 
         led.blink()
 
-    def _spin(self, value, lo, hi, step):
+    def _spin(self, value, lo, hi, step, digits=None):
         adj = Gtk.Adjustment(value=float(value), lower=float(lo), upper=float(hi), step_increment=float(step))
-        return Gtk.SpinButton(adjustment=adj)
+        sp = Gtk.SpinButton(adjustment=adj)
+        if digits is None:
+            text = f"{step:g}"
+            digits = len(text.split(".", 1)[1]) if "." in text else 0
+        sp.set_digits(min(digits, 4))
+        sp.set_numeric(True)
+        return sp
 
     def _entry(self, value):
         e = Gtk.Entry()
@@ -1371,7 +1476,7 @@ class SecuritySettingsDialog:
         c["capture_on_lock"] = self.cam_capture.get_active()
 
         fc = self.cfg.setdefault("faces", {})
-        fc["threshold"] = float(self.face_threshold.get_value())
+        fc["threshold"] = round(float(self.face_threshold.get_value()), 2)
 
         b = self.cfg["bluetooth"]
         b["enabled"] = self.bt_enabled.get_active()
@@ -1432,6 +1537,9 @@ class SecuritySettingsDialog:
             "location.method": self.cfg["location"]["method"],
             "location.home_ssids": self.cfg["location"]["home_ssids"],
             "location.secure_when_offline": self.cfg["location"]["secure_when_offline"],
+            "location.home_lat": self.cfg["location"]["home_lat"],
+            "location.home_lon": self.cfg["location"]["home_lon"],
+            "location.radius_km": self.cfg["location"]["radius_km"],
         }
         events.write_command({"type": "set_many", "values": values})
         events.log_event("config", _("réglages mis à jour"))

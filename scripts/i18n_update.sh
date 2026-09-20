@@ -15,7 +15,7 @@ xgettext --from-code=UTF-8 --package-name=security-linux \
 
 # Mise à jour de chaque catalogue .po (fusion avec msgmerge)
 for PODIR in "${LOCALEDIR}"/*/; do
-  LANG="${PODIR##*/}"
+  LANG="$(basename "$PODIR")"
   PO="${PODIR}LC_MESSAGES/${DOT}.po"
   if [ -f "$PO" ]; then
     echo ">>> Fusion ${LANG}..."
@@ -25,7 +25,7 @@ done
 
 # Compilation
 for PODIR in "${LOCALEDIR}"/*/; do
-  LANG="${PODIR##*/}"
+  LANG="$(basename "$PODIR")"
   PO="${PODIR}LC_MESSAGES/${DOT}.po"
   MO="${PODIR}LC_MESSAGES/${DOT}.mo"
   if [ -f "$PO" ]; then

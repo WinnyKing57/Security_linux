@@ -25,9 +25,10 @@ _DEFAULT_THRESHOLD = 0.45
 def default_threshold() -> float:
     """Seuil de correspondance configuré (Réglages → Webcam), sinon 0.45."""
     try:
-        return float(config.load_config().get("faces", {}).get("threshold", _DEFAULT_THRESHOLD))
+        value = float(config.load_config().get("faces", {}).get("threshold", _DEFAULT_THRESHOLD))
     except (TypeError, ValueError):
         return _DEFAULT_THRESHOLD
+    return min(max(value, 0.0), 1.0)
 
 
 def _cv2():

@@ -742,3 +742,59 @@ def test_should_trigger_braquage_only_on_real_absence(monkeypatch):
 
     monkeypatch.setattr(daemonmod.runtime, "is_debug", lambda: True)
     assert not should_trigger_braquage({"action": "lock", "conditions": {"met": True}})
+
+
+def test_howdy_config_parsing(tmp_path):
+    import security_linux.howdy_ctrl as howdy_ctrl
+
+    ini = tmp_path / "config.ini"
+    ini.write_text(
+        "# commentaire\n"
+        "[core]\n"
+        "disabled = false\n"
+        "use_cnn = false\n"
+        "[video]\n"
+        "# certainté commentée\n"
+        "certainty = 3.5\n"
+        "device_path = /dev/video0\n",
+        encoding="utf-8",
+    )
+    p = str(ini)
+    assert howdy_ctrl.config_value("certainty", p) == "3.5"
+    assert howdy_ctrl.config_value("use_cnn", p) == "false"
+    assert howdy_ctrl.certainty(p) == 3.5
+    assert howdy_ctrl.use_cnn(p) is False
+    assert howdy_ctrl.config_value("absente", p) is None
+
+    ini.write_text("[core]\nuse_cnn = true\n[video]\ncertainty = 2.0\n", encoding="utf-8")
+    assert howdy_ctrl.certainty(p) == 2.0
+    assert howdy_ctrl.use_cnn(p) is True
+
+    assert howdy_ctrl.certainty(str(tmp_path / "vide")) == howdy_ctrl._DEFAULT_CERTAINTY
+
+
+def test_howdy_tune_script_available():
+    import os
+
+    import security_linux.howdy_ctrl as howdy_ctrl
+
+    script = howdy_ctrl.tune_script_path()
+    assert script is not None
+    assert os.path.isfile(script)
+    cmd = howdy_ctrl.tune_command(certainty_value=2.0, use_cnn_value=True)
+    assert cmd is not None
+    assert "--certainty" in cmd
+    assert "--use-cnn" in cmd
+
+
+def test_faces_default_threshold_clamped(monkeypatch):
+    import security_linux.faces as faces
+
+    cfg = copy.deepcopy(DEFAULT_CONFIG)
+    monkeypatch.setattr(faces.config, "load_config", lambda: cfg)
+    cfg["faces"]["threshold"] = 1.5
+    assert faces.default_threshold() == 1.0
+    cfg["faces"]["threshold"] = -0.2
+    assert faces.default_threshold() == 0.0
+    cfg["faces"]["threshold"] = 0.65
+    assert faces.default_threshold() == 0.65

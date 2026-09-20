@@ -103,3 +103,75 @@ def install_command(script: str) -> list[str] | None:
     if terminal:
         return [terminal, "-e", pkexec, script]
     return [pkexec, script]
+
+
+# ----------------------------------------------------- fiabilité Howdy
+DEFAULT_CONFIG_PATH = "/etc/howdy/config.ini"
+_DEFAULT_CERTAINTY = 3.5
+
+
+def config_path() -> str:
+    """Chemin du fichier de configuration Howdy."""
+    return DEFAULT_CONFIG_PATH
+
+
+def config_value(key: str, path: str | None = None) -> str | None:
+    """Valeur d'une clé dans config.ini (première occurrence non commentée).
+
+    Lit ``/etc/howdy/config.ini`` (lisible par tous) ; ``None`` si le fichier
+    est absent ou la clé inconnue.
+    """
+    try:
+        with open(path or DEFAULT_CONFIG_PATH, encoding="utf-8", errors="replace") as fh:
+            for raw in fh:
+                line = raw.strip()
+                if not line or line.startswith(("#", ";")):
+                    continue
+                if not line.startswith("[") and "=" in line:
+                    k, _, v = line.partition("=")
+                    if k.strip() == key:
+                        return v.strip()
+    except OSError:
+        return None
+    return None
+
+
+def certainty(path: str | None = None) -> float:
+    """Seuil de correspondance Howdy (plus bas = plus strict)."""
+    try:
+        return float(config_value("certainty", path) or _DEFAULT_CERTAINTY)
+    except (TypeError, ValueError):
+        return _DEFAULT_CERTAINTY
+
+
+def use_cnn(path: str | None = None) -> bool:
+    """True si la détection CNN (plus précise) est activée dans Howdy."""
+    value = (config_value("use_cnn", path) or "false").strip().lower()
+    return value in ("1", "true", "yes", "on")
+
+
+def tune_script_path() -> str | None:
+    """Chemin du script de réglage de la fiabilité (exécuté en root)."""
+    repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    candidate = os.path.join(repo, "scripts", "tune_howdy.sh")
+    return candidate if os.path.isfile(candidate) else None
+
+
+def tune_command(certainty_value: float | None = None, use_cnn_value: bool | None = None) -> list[str] | None:
+    """Commande de lancement du réglage de fiabilité (root, terminal).
+
+    Applique ``certainty`` et/ou ``use_cnn`` dans /etc/howdy/config.ini.
+    Les valeurs ``None`` ne modifient pas la clé correspondante.
+    """
+    script = tune_script_path()
+    if not script:
+        return None
+    args = []
+    if certainty_value is not None:
+        args += ["--certainty", f"{float(certainty_value):g}"]
+    if use_cnn_value is not None:
+        args.append("--use-cnn" if use_cnn_value else "--no-use-cnn")
+    terminal = shutil.which("x-terminal-emulator") or shutil.which("konsole") or shutil.which("gnome-terminal")
+    if terminal:
+        return [terminal, "-e", "sudo", "sh", script, *args]
+    return ["sudo", "sh", script, *args]

@@ -2,3 +2,6 @@ opencv-python-headless<5,>=4.8
 
 [dev]
 pytest>=7
+
+[security]
+argon2-cffi>=21.1

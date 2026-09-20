@@ -34,6 +34,40 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * r * math.asin(math.sqrt(a))
 
 
+def current_position() -> tuple[float, float] | None:
+    """Position GPS actuelle via GeoClue2 : ``(latitude, longitude)``.
+
+    Utilisée par le moniteur (méthode gps) et par la GUI pour poser le
+    domicile sur la position courante. Retourne ``None`` si GeoClue2 ou le
+    module dbus est indisponible / refusé (déclenche le repli Wi-Fi).
+    """
+    try:
+        import dbus  # noqa: PLC0415
+    except ImportError:
+        return None
+    client = None
+    try:
+        bus = dbus.SystemBus()
+        obj = bus.get_object("org.freedesktop.GeoClue2", "/org/freedesktop/GeoClue2/Client")
+        client = dbus.Interface(obj, "org.freedesktop.GeoClue2.Client")
+        client.SetDesktopId("security-linux")
+        client.Start()
+        client.update_properties()
+        props = client.Get("org.freedesktop.GeoClue2.Client", "Location", dbus_interface="org.freedesktop.DBus.Properties")
+        loc = bus.get_object("org.freedesktop.GeoClue2", props)
+        latt = loc.Get("org.freedesktop.GeoClue2.Location", "Latitude", dbus_interface="org.freedesktop.DBus.Properties")
+        lngg = loc.Get("org.freedesktop.GeoClue2.Location", "Longitude", dbus_interface="org.freedesktop.DBus.Properties")
+        return float(latt), float(lngg)
+    except Exception:  # noqa: BLE001
+        return None
+    finally:
+        if client is not None:
+            try:
+                client.Stop()
+            except Exception:  # noqa: BLE001
+                pass
+
+
 class LocationMonitor(Monitor):
     name = "location"
 
@@ -57,25 +91,7 @@ class LocationMonitor(Monitor):
         return not out.strip()
 
     def _geoclue_position(self) -> tuple[float, float] | None:
-        try:
-            import dbus  # noqa: PLC0415
-        except ImportError:
-            return None
-        try:
-            bus = dbus.SystemBus()
-            obj = bus.get_object("org.freedesktop.GeoClue2", "/org/freedesktop/GeoClue2/Client")
-            client = dbus.Interface(obj, "org.freedesktop.GeoClue2.Client")
-            client.SetDesktopId("security-linux")
-            client.Start()
-            client.update_properties()
-            props = client.Get("org.freedesktop.GeoClue2.Client", "Location", dbus_interface="org.freedesktop.DBus.Properties")
-            loc = bus.get_object("org.freedesktop.GeoClue2", props)
-            latt = loc.Get("org.freedesktop.GeoClue2.Location", "Latitude", dbus_interface="org.freedesktop.DBus.Properties")
-            lngg = loc.Get("org.freedesktop.GeoClue2.Location", "Longitude", dbus_interface="org.freedesktop.DBus.Properties")
-            client.Stop()
-            return float(latt), float(lngg)
-        except Exception:
-            return None
+        return current_position()
 
     def tick(self) -> MonitorResult:
         cfg = self.cfg
