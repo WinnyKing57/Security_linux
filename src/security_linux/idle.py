@@ -4,6 +4,13 @@ Compatibilité :
   * KDE / X11 → org.freedesktop.ScreenSaver.GetSessionIdleTime (qdbus6/qdbus)
   * GNOME (Wayland/X11) → org.gnome.Mutter.IdleMonitor.GetIdletime (dbus-send)
 
+Piège documenté : ces deux interfaces renvoient la durée en **millisecondes**
+même si la spécification ``org.freedesktop.ScreenSaver`` parle de secondes —
+KDE et Mutter ignorent la spécification et renvoient des ms. On divise donc
+par 1000. Une interface qui renverrait réellement des secondes donne alors une
+valeur plus petite : le repli se désactive silencieusement (jamais de faux
+verrouillage, contrairement à l'inverse).
+
 Aucune de ces interfaces n'étant fiable partout, ``idle_seconds()`` renvoie
 ``None`` si l'inactivité est impossible à mesurer (repli silencieusement
 désactivé).
@@ -12,6 +19,8 @@ from __future__ import annotations
 
 import re
 import subprocess
+
+_MS_TO_SECONDS = 1000.0
 
 
 def _run(cmd: list[str], timeout: float = 5) -> tuple[int, str]:
@@ -45,5 +54,5 @@ def idle_seconds() -> float | None:
             continue
         value = _parse_number(out)
         if value is not None and value >= 0:
-            return float(value)
+            return float(value) / _MS_TO_SECONDS
     return None

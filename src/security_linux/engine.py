@@ -189,9 +189,12 @@ class Engine:
             decision["time_to_lock"] = 0.0
 
         # Filet de sécurité : verrouillage de repli sur inactivité prolongée,
-        # indépendant des capteurs (utile si webcam + Bluetooth sont tous deux
-        # indisponibles). 0 = désactivé.
-        if idle_minutes > 0 and decision["action"] is None:
+        # UNIQUEMENT si aucun capteur ne peut confirmer la présence (webcam et
+        # Bluetooth tous deux indisponibles ou coupés). Si un capteur voit
+        # l'utilisateur (ex. camera « présent »), l'inactivité seule ne doit
+        # jamais verrouiller : c'était la cause des verrouillages « pour rien »
+        # alors que l'utilisateur était devant la webcam. 0 = désactivé.
+        if idle_minutes > 0 and decision["action"] is None and not cond["counts"]:
             idle_sec = idle.idle_seconds()
             if idle_sec is not None and idle_sec >= idle_minutes * 60:
                 if self._last_lock_ts is None or (now - self._last_lock_ts) > repeat_min:

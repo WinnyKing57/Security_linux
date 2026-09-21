@@ -634,8 +634,9 @@ def test_engine_idle_lock_fn_error_no_spam(monkeypatch):
     monkeypatch.setattr(idle_mod, "idle_seconds", lambda: 300)
 
     states = {
-        "camera": FakeMon("present", 0),
-        "bluetooth": FakeMon("present", 0),
+        # aucun capteur disponible : le repli d'inactivité est seul actif
+        "camera": FakeMon("unavailable", 0),
+        "bluetooth": FakeMon("disabled", 0),
         "location": MonitorResult("location", "home", at_home=True, offline=False),
     }
     first = engine.tick(states, manual_armed=True)
@@ -715,8 +716,9 @@ def test_engine_idle_lock_keeps_conditions_unmet(monkeypatch):
     monkeypatch.setattr(idle_mod, "idle_seconds", lambda: 300)
 
     states = {
-        "camera": FakeMon("present", 0),
-        "bluetooth": FakeMon("present", 0),
+        # aucun capteur disponible : seul le repli d'inactivité est actif
+        "camera": FakeMon("unavailable", 0),
+        "bluetooth": FakeMon("disabled", 0),
         "location": MonitorResult("location", "home", at_home=True, offline=False),
     }
     decision = engine.tick(states, manual_armed=True)

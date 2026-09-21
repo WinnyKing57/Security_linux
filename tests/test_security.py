@@ -175,6 +175,15 @@ def test_event_log_has_chain_field():
 
 
 # ------------------------------------------------------------ inactivité
+def _sensors_unsupported_state():
+    """Aucun capteur ne peut confirmer la présence (situation de repli)."""
+    return {
+        "camera": MonitorResult("camera", "unavailable"),
+        "bluetooth": MonitorResult("bluetooth", "disabled"),
+        "location": MonitorResult("location", "home", at_home=True, offline=False),
+    }
+
+
 def test_engine_idle_fallback_locks(monkeypatch):
     import security_linux.engine as engmod
 
@@ -184,10 +193,27 @@ def test_engine_idle_fallback_locks(monkeypatch):
     engine, locks = _make_engine(cfg)
     monkeypatch.setattr(engmod.idle, "idle_seconds", lambda: 6 * 60)
 
-    states = _home_state()
+    states = _sensors_unsupported_state()
     d = engine.tick(states, manual_armed=True)
     assert d["action"] == "lock"
     assert locks["n"] == 1
+
+
+def test_engine_idle_does_not_lock_when_sensor_present(monkeypatch):
+    """Régression : l'inactivité seule ne verrouille pas quand la webcam voit
+    l'utilisateur (verrouillage « pour rien » devant la caméra)."""
+    import security_linux.engine as engmod
+
+    cfg = copy.deepcopy(DEFAULT_CONFIG)
+    cfg["general"]["idle_lock_minutes"] = 1
+    cfg["general"]["lock_grace_seconds"] = 0
+    engine, locks = _make_engine(cfg)
+    monkeypatch.setattr(engmod.idle, "idle_seconds", lambda: 6 * 60)
+
+    states = _home_state()  # caméra présent, Bluetooth présent
+    d = engine.tick(states, manual_armed=True)
+    assert d["action"] is None
+    assert locks["n"] == 0
 
 
 def test_engine_idle_disabled_by_default():
@@ -209,6 +235,23 @@ def test_engine_idle_no_lock_below_threshold(monkeypatch):
     d = engine.tick(_home_state(), manual_armed=True)
     assert d["action"] is None
     assert locks["n"] == 0
+
+
+def test_idle_seconds_converts_kde_milliseconds(monkeypatch):
+    """KDE/Mutter renvoient ms : 250000 ms doit donner 250 s (et pas 250000 s).
+    Une valeur en ms élevée (~7 mn d'inactivité réelle) ne doit pas dépasser
+    un seuil de 1 minute exprimé en secondes."""
+    import security_linux.idle as idle_mod
+
+    monkeypatch.setattr(idle_mod, "_run", lambda *_a, **_k: (0, "250000\n"))
+    assert idle_mod.idle_seconds() == 250.0
+
+
+def test_idle_seconds_none_when_dbus_unreachable(monkeypatch):
+    import security_linux.idle as idle_mod
+
+    monkeypatch.setattr(idle_mod, "_run", lambda *_a, **_k: (-1, ""))
+    assert idle_mod.idle_seconds() is None
 
 
 # ------------------------------------------------------------ défauts
